@@ -4,7 +4,6 @@ import hashlib
 import tkinter as tk
 from tkinter import ttk,font as tkfont
 from .core import urgency
-from .widgets import AutoScrollbar
 from .theme import BG,CARD,FG,MUTED,ACCENT,LINE,SURFACE,HOVER
 
 STATUS_COLORS={'Pendiente':'#fdab3d','En curso':'#7b83ff','Esperando':'#e89a59','Terminado':'#00c875'}
@@ -30,15 +29,33 @@ def due_label(value):
         return f'{date.day} {month}'
     except (ValueError,TypeError):return 'Sin fecha'
 
+def table_pages(items,height,scale,collapsed=(),recent=False):
+    groups=[('Actualizaciones recientes',items)] if recent else [(name,[d for d in items if group_for(d)==name]) for name,_ in GROUPS]
+    pages=[];page=[];used=32*scale
+    for name,group in groups:
+        if not group:continue
+        if name in collapsed:
+            if page and used+60*scale>height:pages.append(page);page=[];used=32*scale
+            page.extend(group);used+=60*scale;continue
+        started=False
+        for item in group:
+            extra=(94 if not started else 0)*scale+46*scale
+            if page and used+extra>height:pages.append(page);page=[];used=32*scale;started=False;extra=140*scale
+            page.append(item);used+=extra;started=True
+    if page:pages.append(page)
+    return pages or [[]]
+
 class TaskBoard(ttk.Frame):
     def __init__(self,parent,on_open,on_new,on_action):
         super().__init__(parent,style='Panel.TFrame')
         self.on_open=on_open;self.on_new=on_new;self.on_action=on_action
-        self.items=[];self.mode='table';self.group_mode='status';self.selected_id=None;self.hover_id=None;self.collapsed=set();self.hits=[];self.shapes={};self.menu_shapes={};self.tip=None;self.tip_job=None;self.layout_job=None
-        self.canvas=tk.Canvas(self,bg=SURFACE,highlightthickness=0,height=300,takefocus=True)
-        sy=AutoScrollbar(self,orient='vertical',command=self.scroll_y);sx=AutoScrollbar(self,orient='horizontal',command=self.scroll_x)
-        self.canvas.configure(yscrollcommand=sy.set,xscrollcommand=sx.set)
-        self.canvas.grid(row=0,column=0,sticky='nsew');sy.grid(row=0,column=1,sticky='ns');sx.grid(row=1,column=0,sticky='ew')
+        self.items=[];self.page=0;self.pages=[[]];self.visible_items=[];self.mode='table';self.group_mode='status';self.selected_id=None;self.hover_id=None;self.collapsed=set();self.hits=[];self.shapes={};self.menu_shapes={};self.tip=None;self.tip_job=None;self.layout_job=None
+        self.canvas=tk.Canvas(self,bg=SURFACE,highlightthickness=0,height=1,width=1,takefocus=True)
+        self.canvas.grid(row=0,column=0,sticky='nsew')
+        self.pager=ttk.Frame(self,padding=(10,4),style='Panel.TFrame');self.pager.grid(row=1,column=0,sticky='ew');self.pager.columnconfigure(1,weight=1)
+        self.previous_button=ttk.Button(self.pager,text='‹ Anterior',command=lambda:self.change_page(-1));self.previous_button.grid(row=0,column=0)
+        self.page_label=ttk.Label(self.pager,text='',background=SURFACE,foreground=MUTED,anchor='center');self.page_label.grid(row=0,column=1,sticky='ew',padx=6)
+        self.next_button=ttk.Button(self.pager,text='Siguiente ›',command=lambda:self.change_page(1));self.next_button.grid(row=0,column=2)
         self.columnconfigure(0,weight=1);self.rowconfigure(0,weight=1)
         self.canvas.bind('<Configure>',self.schedule_render)
         self.canvas.bind('<Motion>',self.motion);self.canvas.bind('<Leave>',lambda e:self.clear_hover())
@@ -46,18 +63,18 @@ class TaskBoard(ttk.Frame):
         self.canvas.bind('<Button-3>',self.context_click);self.canvas.bind('<Return>',lambda e:self.on_open())
         self.canvas.bind('<Up>',lambda e:self.navigate(-1));self.canvas.bind('<Down>',lambda e:self.navigate(1))
         self.canvas.bind('<MouseWheel>',self.wheel)
-        self.canvas.bind('<Button-4>',lambda e:self.scroll_y('scroll',-1,'units'))
-        self.canvas.bind('<Button-5>',lambda e:self.scroll_y('scroll',1,'units'))
+        self.canvas.bind('<Button-4>',lambda e:'break')
+        self.canvas.bind('<Button-5>',lambda e:'break')
     def s(self,n):return round(n*self.scale)
     def selection(self):return (self.selected_id,) if self.selected_id else ()
     def selection_set(self,id):
         if any(d['id']==id for d in self.items):self.selected_id=id;self.render()
     def set_items(self,items):
-        self.items=list(items)
+        self.items=list(items);self.page=0
         if self.selected_id not in {d['id'] for d in items}:self.selected_id=None
         self.hover_id=None;self.hide_tip();self.render()
     def set_mode(self,mode):
-        self.mode=mode if mode in ('table','cards') else 'table';self.canvas.xview_moveto(0);self.canvas.yview_moveto(0);self.render()
+        self.mode=mode if mode in ('table','cards') else 'table';self.page=0;self.render()
     def schedule_render(self,event=None):
         if self.layout_job:self.after_cancel(self.layout_job)
         self.layout_job=self.after(30,self.render)
@@ -99,17 +116,29 @@ class TaskBoard(ttk.Frame):
     def render(self):
         self.layout_job=None
         if not self.winfo_exists():return
-        self.scale=max(.85,float(self.tk.call('tk','scaling'))/1.333)
-        self.fonts={key:tkfont.Font(family='Segoe UI',size=size,weight=weight) for key,size,weight in [('normal',10,'normal'),('small',9,'normal'),('bold',10,'bold'),('heading',12,'bold'),('avatar',8,'bold'),('empty',16,'bold')]}
+        self.scale=max(.4,min(float(self.tk.call('tk','scaling'))/1.333,self.canvas.winfo_width()/(850 if self.mode=='table' else 500),self.canvas.winfo_height()/205))
+        self.fonts={key:tkfont.Font(family='Segoe UI',size=-max(7,round(size*1.333*self.scale)),weight=weight) for key,size,weight in [('normal',10,'normal'),('small',9,'normal'),('bold',10,'bold'),('heading',12,'bold'),('avatar',8,'bold'),('empty',16,'bold')]}
         self.canvas.delete('all');self.hits=[];self.shapes={};self.menu_shapes={}
+        if self.mode=='cards':
+            pad=self.s(16);gap=self.s(16);self.card_columns=max(1,min(4,int((self.canvas.winfo_width()-2*pad+gap)/(self.s(220)+gap))));rows=max(1,int((self.canvas.winfo_height()-2*pad+gap)/(self.s(205)+gap)))
+            capacity=self.card_columns*rows
+            ordered=self.items if self.group_mode=='recent' else sorted(self.items,key=lambda d:next(i for i,(g,_) in enumerate(GROUPS) if g==group_for(d)))
+            self.pages=[ordered[i:i+capacity] for i in range(0,len(ordered),capacity)] or [[]]
+        else:self.pages=table_pages(self.items,self.canvas.winfo_height(),self.scale,self.collapsed,self.group_mode=='recent')
+        self.page=max(0,min(self.page,len(self.pages)-1));self.visible_items=self.pages[self.page]
+        self.page_label.configure(text=f'Página {self.page+1} de {len(self.pages)} · {len(self.items)} elementos')
+        self.previous_button.configure(state='normal' if self.page else 'disabled');self.next_button.configure(state='normal' if self.page+1<len(self.pages) else 'disabled')
         if self.mode=='cards':self.draw_cards()
         else:self.draw_table()
+        self.canvas.configure(scrollregion=(0,0,self.canvas.winfo_width(),self.canvas.winfo_height()));self.canvas.xview_moveto(0);self.canvas.yview_moveto(0)
         self.paint_selection()
+    def change_page(self,delta):
+        self.hide_tip();self.page=max(0,min(self.page+delta,len(self.pages)-1));self.render()
     def add_hit(self,x,y,w,h,kind,value):self.hits.append((x,y,x+w,y+h,kind,value))
     def draw_table(self):
-        pad=self.s(16);width=max(self.canvas.winfo_width()-2*pad,self.s(850));y=self.s(16)
-        groups=[(name,color,[d for d in self.items if group_for(d)==name]) for name,color in GROUPS]
-        if self.group_mode=='recent':groups=[('Actualizaciones recientes',ACCENT,self.items)]
+        pad=self.s(16);width=max(1,self.canvas.winfo_width()-2*pad);y=self.s(16)
+        groups=[(name,color,[d for d in self.visible_items if group_for(d)==name]) for name,color in GROUPS]
+        if self.group_mode=='recent':groups=[('Actualizaciones recientes',ACCENT,self.visible_items)]
         if not self.items:self.empty(width,pad);return
         for name,color,items in groups:
             if not items:continue
@@ -138,33 +167,26 @@ class TaskBoard(ttk.Frame):
                 self.menu_shapes[id]=self.text(edges[6]+(edges[7]-edges[6])/2,cy,'···','bold',MUTED,anchor='center')
                 self.add_hit(pad,y,width-self.s(32),h,'item',id);self.add_hit(pad+width-self.s(32),y,self.s(32),h,'menu',id)
                 y+=h
-            self.text(pad+self.s(18),y+self.s(17),'+  Añadir tarea','small',MUTED);self.add_hit(pad,y,width,self.s(34),'new',None)
-            y+=self.s(62)
+            y+=self.s(18)
         self.canvas.configure(scrollregion=(0,0,pad*2+width,max(y,self.canvas.winfo_height())))
     def draw_cards(self):
-        pad=self.s(16);gap=self.s(16);colw=max(self.s(220),int((self.canvas.winfo_width()-2*pad-3*gap)/4));statuses=['Pendiente','En curso','Esperando','Terminado'];bottom=self.s(270)
-        for i,status in enumerate(statuses):
-            x=pad+i*(colw+gap);color=STATUS_COLORS[status];items=[d for d in self.items if d['status']==status]
-            self.round_rect(x,self.s(16),colw,self.s(40),CARD,radius=7)
-            self.canvas.create_oval(x+self.s(13),self.s(31),x+self.s(21),self.s(39),fill=color,outline=color)
-            self.text(x+self.s(30),self.s(36),status,'bold')
-            self.text(x+colw-self.s(17),self.s(36),str(len(items)),'small',MUTED,anchor='e');y=self.s(70)
-            for d in items:
-                h=self.s(205);shape=self.round_rect(x,y,colw,h,CARD,outline=LINE,radius=10);self.shapes[d['id']]=shape
-                self.text(x+self.s(16),y+self.s(22),d['kind'].upper(),'small',KIND_COLORS.get(d['kind'],MUTED))
-                self.menu_shapes[d['id']]=self.text(x+colw-self.s(20),y+self.s(22),'···','bold',MUTED,anchor='center')
-                title=self.lines(d['title'],colw-self.s(32),2,'bold')
-                self.text(x+self.s(16),y+self.s(44),title,'bold',anchor='nw')
-                self.text(x+self.s(16),y+self.s(91),self.lines(d.get('summary',''),colw-self.s(32),2),'small',MUTED,anchor='nw')
-                priority='Máxima' if urgency(d)==3 else d['priority'];pc={'Máxima':'#f07188','Alta':'#fdab3d'}.get(priority,'#aaa5ff')
-                self.pill(x+self.s(16),y+self.s(137),priority,pc)
-                self.text(x+colw-self.s(15),y+self.s(149),due_label(d['deadline']),'small','#f07188' if urgency(d)==3 else MUTED,anchor='e')
-                self.owners(x+self.s(16),y+self.s(184),d.get('owners'),colw-self.s(32))
-                self.add_hit(x,y,colw,h,'item',d['id']);self.add_hit(x+colw-self.s(40),y,self.s(40),self.s(38),'menu',d['id'])
-                y+=h+gap
-            self.text(x+self.s(15),y+self.s(20),'+ Añadir tarea','small',MUTED);self.add_hit(x,y,colw,self.s(40),'new',None)
-            bottom=max(bottom,y+self.s(56))
-        self.canvas.configure(scrollregion=(0,0,pad*2+4*(colw+gap)-gap,bottom))
+        pad=self.s(16);gap=self.s(16);columns=self.card_columns
+        colw=max(1,int((self.canvas.winfo_width()-2*pad-(columns-1)*gap)/columns))
+        if not self.items:self.empty(self.canvas.winfo_width()-2*pad,pad);return
+        for i,d in enumerate(self.visible_items):
+            x=pad+(i%columns)*(colw+gap);y=pad+(i//columns)*(self.s(205)+gap);h=self.s(205)
+            shape=self.round_rect(x,y,colw,h,CARD,outline=LINE,radius=10);self.shapes[d['id']]=shape
+            color=STATUS_COLORS[d['status']]
+            self.canvas.create_oval(x+self.s(15),y+self.s(15),x+self.s(23),y+self.s(23),fill=color,outline=color)
+            self.text(x+self.s(30),y+self.s(20),d['status'],'small',color)
+            self.menu_shapes[d['id']]=self.text(x+colw-self.s(20),y+self.s(20),'···','bold',MUTED,anchor='center')
+            self.text(x+self.s(16),y+self.s(42),self.lines(d['title'],colw-self.s(32),2,'bold'),'bold',anchor='nw')
+            self.text(x+self.s(16),y+self.s(88),self.lines(d.get('summary',''),colw-self.s(32),2),'small',MUTED,anchor='nw')
+            priority='Máxima' if urgency(d)==3 else d['priority'];pc={'Máxima':'#f07188','Alta':'#fdab3d'}.get(priority,'#aaa5ff')
+            self.pill(x+self.s(16),y+self.s(134),priority,pc)
+            self.text(x+colw-self.s(15),y+self.s(146),due_label(d['deadline']),'small','#f07188' if urgency(d)==3 else MUTED,anchor='e')
+            self.owners(x+self.s(16),y+self.s(181),d.get('owners'),colw-self.s(32))
+            self.add_hit(x,y,colw,h,'item',d['id']);self.add_hit(x+colw-self.s(40),y,self.s(40),self.s(38),'menu',d['id'])
     def empty(self,width,pad):
         y=self.s(35)
         self.text(pad+self.s(14),y,'Tu tablero empieza acá','empty')
@@ -228,22 +250,13 @@ class TaskBoard(ttk.Frame):
         try:menu.tk_popup(x,y)
         finally:menu.grab_release()
     def navigate(self,direction):
-        ids=[d['id'] for d in self.items]
+        ids=[d['id'] for page in self.pages for d in page]
         if not ids:return
         index=ids.index(self.selected_id) if self.selected_id in ids else (-1 if direction>0 else 0)
-        self.selected_id=ids[(index+direction)%len(ids)];self.paint_selection()
-        hit=next((h for h in self.hits if h[4]=='item' and h[5]==self.selected_id),None)
-        if hit:
-            region=self.canvas.bbox('all')
-            if region:self.canvas.yview_moveto(max(0,hit[1]-self.s(50))/max(1,region[3]))
+        self.selected_id=ids[(index+direction)%len(ids)]
+        self.page=next(i for i,page in enumerate(self.pages) if any(d['id']==self.selected_id for d in page));self.render()
         return 'break'
-    def wheel(self,event):
-        self.hide_tip()
-        if event.state&1:self.canvas.xview_scroll(-int(event.delta/120),'units')
-        else:self.canvas.yview_scroll(-int(event.delta/120),'units')
-        return 'break'
-    def scroll_y(self,*args):self.hide_tip();self.canvas.yview(*args)
-    def scroll_x(self,*args):self.hide_tip();self.canvas.xview(*args)
+    def wheel(self,event):return 'break'
     def destroy(self):
         self.hide_tip()
         if self.layout_job:self.after_cancel(self.layout_job)

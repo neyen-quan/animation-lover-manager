@@ -36,7 +36,7 @@ class BoardInteractions(unittest.TestCase):
     app.editor(tasks[0]);app.update()
     from tkinter import ttk
     import tkinter as tk
-    window=next(w for w in app.winfo_children() if isinstance(w,tk.Toplevel))
+    window=next(w for w in app.winfo_children() if isinstance(w,tk.Toplevel) and w.state()!='withdrawn')
     def walk(w):
      for child in w.winfo_children():
       yield child
@@ -49,7 +49,7 @@ class BoardInteractions(unittest.TestCase):
     if os.getenv('ALM_SCREENSHOT'):
      import time
      from PIL import ImageGrab
-     app.geometry(f'{min(1340,app.winfo_screenwidth()-80)}x{min(860,app.winfo_screenheight()-100)}');app.update();app.area.canvas.yview_moveto(0);app.update()
+     app.geometry(f'{min(1340,app.winfo_screenwidth()-80)}x{min(860,app.winfo_screenheight()-100)}');app.update();app.update()
      time.sleep(.1);app.update();ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'].replace('.png','-table.png'))
      app.set_layout('cards');app.update();time.sleep(.1);app.update();ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'].replace('.png','-cards.png'))
    finally:app.close()

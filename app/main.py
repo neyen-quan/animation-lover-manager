@@ -9,11 +9,12 @@ from . import __version__
 from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, SHELL, apply_theme
 from .widgets import ScrollArea, WrapBar
 from .board import TaskBoard
+from .windowing import place_window
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__(); self.title('Animation Lover · Gestión · '+__version__)
-        self.geometry(f"{min(1340,self.winfo_screenwidth()-64)}x{min(860,self.winfo_screenheight()-90)}");self.minsize(780,520)
+        self.withdraw();self.minsize(780,520)
         apply_theme(self)
         import sys
         icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets/icon.png'
@@ -29,24 +30,22 @@ class App(tk.Tk):
         self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=2,padx=5)
         ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=3,padx=(5,0))
         sidebar=tk.Frame(self,bg=BG,width=round(190*max(.85,float(self.tk.call('tk','scaling'))/1.333)));sidebar.grid(row=1,column=0,sticky='ns');sidebar.grid_propagate(False);sidebar.rowconfigure(0,weight=1);sidebar.columnconfigure(0,weight=1)
-        navarea=ScrollArea(sidebar);navarea.grid(row=0,column=0,sticky='nsew');navarea.canvas.configure(width=160)
-        nav=ttk.Frame(navarea.body,padding=(14,20));nav.pack(fill='both',expand=True)
-        ttk.Label(nav,text='ESPACIO PERSONAL',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(0,15))
+        nav=ttk.Frame(sidebar,padding=(14,12));nav.grid(row=0,column=0,sticky='nsew')
+        ttk.Label(nav,text='ESPACIO PERSONAL',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(0,8))
         self.nav_buttons={}
         for v,label in [('Hoy','Mi día'),('Todas','Mi tablero'),('Por persona','Por persona'),('Recientes','Recientes')]:
             button=ttk.Button(nav,text=label,style='Nav.TButton',command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
-        ttk.Label(nav,text='ORGANIZACIÓN',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(25,10))
+        ttk.Label(nav,text='ORGANIZACIÓN',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(15,6))
         for v,label in [('Idea','Ideas'),('Roadmap','Roadmap'),('Nota','Notas'),('Papelera','Papelera')]:
             button=ttk.Button(nav,text=label,style='Nav.TButton',command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
-        ttk.Separator(nav).pack(fill='x',pady=20)
+        ttk.Separator(nav).pack(fill='x',pady=12)
         ttk.Button(nav,text='Finanzas · luego',style='Nav.TButton',command=self.finance).pack(fill='x')
-        ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8)).pack(anchor='w',padx=10,pady=24)
-        self.area=ScrollArea(self);self.area.grid(row=1,column=1,sticky='nsew')
-        content=ttk.Frame(self.area.body,padding=(22,22,24,18));content.pack(fill='both',expand=True)
+        ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8)).pack(anchor='w',padx=10,pady=12)
+        content=ttk.Frame(self,padding=(22,16,24,12));content.grid(row=1,column=1,sticky='nsew');self.content=content
         content.columnconfigure(0,weight=1);content.rowconfigure(5,weight=1)
         self.page_title=ttk.Label(content,text='Mi día',font=('Segoe UI',25,'bold'));self.page_title.grid(row=0,column=0,sticky='w')
-        self.summary=ttk.Label(content,foreground=MUTED);self.summary.grid(row=1,column=0,sticky='ew',pady=(5,20))
-        stats=ttk.Frame(content);stats.grid(row=2,column=0,sticky='ew',pady=(0,20));self.metrics={}
+        self.summary=ttk.Label(content,foreground=MUTED);self.summary.grid(row=1,column=0,sticky='ew',pady=(4,12))
+        stats=ttk.Frame(content);stats.grid(row=2,column=0,sticky='ew',pady=(0,12));self.metrics={}
         for index,(key,label,color) in enumerate([('pending','POR HACER','#a7afff'),('running','EN CURSO','#fdab3d'),('overdue','VENCIDAS','#f07188')]):
             stats.columnconfigure(index,weight=1,uniform='metric')
             tile=tk.Frame(stats,bg=SURFACE,highlightthickness=1,highlightbackground=LINE,padx=16,pady=10);tile.grid(row=0,column=index,sticky='ew',padx=(0,10 if index<2 else 0))
@@ -63,36 +62,46 @@ class App(tk.Tk):
         filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
         self.board=TaskBoard(content,self.open_selected,lambda:self.editor(fresh()),self.board_action);self.board.grid(row=5,column=0,sticky='nsew')
         self.tree=self.board
-        actions=WrapBar(content);actions.grid(row=6,column=0,sticky='ew',pady=(9,0))
+        actions=WrapBar(content);actions.grid(row=6,column=0,sticky='ew',pady=(6,0));self.task_actions=actions
         for title,cmd in [('Abrir tarjeta',self.open_selected),('Preparar mensaje',self.notify),('Historial',self.history),('Deshacer',self.undo)]:actions.add(ttk.Button(actions,text=title,command=cmd))
         self.capture_visible=False
-        self.capture=ttk.Frame(content,padding=(0,20));capture=self.capture;capture.grid(row=7,column=0,sticky='ew');capture.columnconfigure(0,weight=1)
+        self.capture_window=tk.Toplevel(self);self.capture_window.withdraw();self.capture_window.title('Soltar idea · Animation Lover');self.capture_window.configure(bg=BG);self.capture_window.transient(self);self.capture_window.protocol('WM_DELETE_WINDOW',self.hide_capture)
+        self.capture_window.minsize(620,440);self.capture_window.rowconfigure(0,weight=1);self.capture_window.columnconfigure(0,weight=1)
+        self.capture=ttk.Frame(self.capture_window,padding=22);capture=self.capture;capture.grid(row=0,column=0,sticky='nsew');capture.columnconfigure(0,weight=1);capture.rowconfigure(2,weight=1)
         capture_header=ttk.Frame(capture);capture_header.grid(row=0,column=0,sticky='ew');capture_header.columnconfigure(0,weight=1)
         ttk.Label(capture_header,text='Soltá una idea',font=('Segoe UI',17,'bold')).grid(row=0,column=0,sticky='w')
-        ttk.Button(capture_header,text='Cerrar captura',command=self.toggle_capture).grid(row=0,column=1)
+        ttk.Button(capture_header,text='Cerrar',command=self.hide_capture).grid(row=0,column=1)
         ttk.Label(capture,text='Texto, voz o capturas. Contalo con tus palabras.',foreground=MUTED).grid(row=1,column=0,sticky='w',pady=(4,10))
         self.input=tk.Text(capture,height=4,bg=SURFACE,fg=FG,insertbackground=FG,relief='flat',highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT,font=('Segoe UI',11),wrap='word',padx=14,pady=12)
-        self.input.grid(row=2,column=0,sticky='ew')
+        self.input.grid(row=2,column=0,sticky='nsew')
         toolbar=WrapBar(capture);toolbar.grid(row=3,column=0,sticky='ew',pady=7)
         toolbar.add(ttk.Label(toolbar,text='Idea de'))
         self.author_box=toolbar.add(ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=12))
         toolbar.add(ttk.Checkbutton(toolbar,text='Conservar adjuntos',variable=self.keep))
-        for title,cmd in [('Adjuntar',self.attach),('Pegar imagen',self.paste_image),('Grabar',self.record),('Parar y transcribir',lambda:self.stop(False)),('Parar y ejecutar',lambda:self.stop(True))]:toolbar.add(ttk.Button(toolbar,text=title,command=cmd))
-        submit=WrapBar(capture);submit.grid(row=4,column=0,sticky='ew')
+        for title,cmd in [('Adjuntar',self.attach),('Pegar imagen',self.paste_image)]:toolbar.add(ttk.Button(toolbar,text=title,command=cmd))
+        voice=WrapBar(capture);voice.grid(row=4,column=0,sticky='ew',pady=(0,7))
+        for title,cmd in [('Grabar',self.record),('Parar y transcribir',lambda:self.stop(False)),('Parar y ejecutar',lambda:self.stop(True))]:voice.add(ttk.Button(voice,text=title,command=cmd))
+        self.capture_status=ttk.Label(capture,text='Tu entrada se conserva si cerrás esta ventana.',foreground=MUTED,wraplength=650);self.capture_status.grid(row=6,column=0,sticky='ew',pady=(10,0))
+        submit=WrapBar(capture);submit.grid(row=5,column=0,sticky='ew')
         self.interpret_button=submit.add(ttk.Button(submit,text='Interpretar entrada',style='Accent.TButton',command=self.process))
         self.selected_button=submit.add(ttk.Button(submit,text='Actualizar seleccionada',command=self.process_selected))
-        self.capture.grid_remove()
         self.status=ttk.Label(self,text='Listo · Seleccioná una tarea o tocá Soltar idea.',foreground=MUTED,padding=(20,8),wraplength=700);self.status.grid(row=2,column=0,columnspan=2,sticky='ew')
         self.input.insert('1.0',self.store.setting('draft') or '');self.input.bind('<<Modified>>',self.save_draft)
         self.search.trace_add('write',lambda *a:self.refresh())
         self.set_layout(self.store.setting('board_layout') or 'table');self.refresh();self._poll_job=self.after(100,self.poll);self._result_job=self.after(1500,self.show_update_result)
+        self.start_area=place_window(self)
     def toggle_capture(self):
-        if self.capture_visible and self.recording:messagebox.showinfo('Grabando','Detené la grabación antes de cerrar la captura.');return
-        self.capture_visible=not self.capture_visible
-        if self.capture_visible:
-            self.capture.grid();self.input.focus_set();self._capture_scroll_job=self.after(80,lambda:self.area.canvas.yview_moveto(1))
-        else:self.capture.grid_remove()
-        self.capture_button.configure(text='Cerrar captura' if self.capture_visible else '+ Soltar idea')
+        self.show_capture()
+    def show_capture(self):
+        if self.busy and getattr(self,'_processing_capture',False):
+            messagebox.showinfo('Procesando','Estoy organizando la entrada. La tarjeta aparecerá al terminar.',parent=self);return
+        if not self.capture_visible:
+            self.capture_visible=True;place_window(self.capture_window,840,540,parent=self)
+        self.capture_window.lift();self.input.focus_set()
+    def hide_capture(self,force=False):
+        if not force and (self.recording or self.busy):
+            messagebox.showinfo('Operación en curso','Terminá la grabación o el procesamiento antes de cerrar.',parent=self.capture_window);return
+        self.save_draft();self.capture_visible=False;self.capture_window.withdraw()
     def set_layout(self,mode):
         mode=mode if mode in ('table','cards') else 'table'
         self.board.set_mode(mode);self.store.setting('board_layout',mode)
@@ -120,7 +129,7 @@ class App(tk.Tk):
             self.store.setting('draft',self.input.get('1.0','end').strip())
             self.input.edit_modified(False)
     def destroy(self):
-        for name in ('_poll_job','_result_job','_capture_scroll_job','record_timer'):
+        for name in ('_poll_job','_result_job','record_timer'):
             job=getattr(self,name,None)
             if job:
                 try:self.after_cancel(job)
@@ -152,20 +161,27 @@ class App(tk.Tk):
         self.summary.configure(text=f"{today().strftime('%d/%m/%Y')}   ·   {len(filtered)} elementos en esta vista   ·   {sum(bool(d.get('questions')) for d in active)} por aclarar")
         self.board.group_mode='recent' if view=='Recientes' else 'status'
         self.board.set_items(filtered)
-    def run(self,work,done):
+    def run(self,work,done,on_error=None):
         if self.busy:return
-        self.busy=True; self.status.configure(text='Procesando…')
+        self.busy=True; self.status.configure(text='Procesando…');self.capture_status.configure(text='Procesando…')
         def worker():
-            try:self.jobs.put((done,work(),None))
-            except Exception as e:self.jobs.put((done,None,str(e)))
+            try:self.jobs.put((done,work(),None,on_error))
+            except Exception as e:self.jobs.put((done,None,str(e),on_error))
         threading.Thread(target=worker,daemon=True).start()
     def poll(self):
         try:
-            done,result,error=self.jobs.get_nowait(); self.busy=False
-            if error:self.status.configure(text='No se pudo completar. Tu entrada sigue disponible.'); messagebox.showerror('No se pudo completar',error)
+            done,result,error,on_error=self.jobs.get_nowait();self.busy=False;self._processing_capture=False
+            if error:
+                if on_error:on_error()
+                self.status.configure(text='No se pudo completar. Tu entrada sigue disponible.');self.capture_status.configure(text='No se pudo completar. Podés corregir y reintentar.')
+                messagebox.showerror('No se pudo completar',error,parent=self.capture_window if self.capture_visible else self)
             else:
-                try:done(result); self.status.configure(text='Listo · Podés deshacer el último cambio.')
-                except Exception as e:messagebox.showerror('Revisar',str(e))
+                try:
+                    done(result)
+                    if not self.busy:self.status.configure(text='Listo · Podés deshacer el último cambio.');self.capture_status.configure(text='Listo · Podés revisar el texto y enviarlo.')
+                except Exception as e:
+                    if on_error:on_error()
+                    messagebox.showerror('Revisar',str(e),parent=self.capture_window if self.capture_visible else self)
         except queue.Empty:pass
         self._poll_job=self.after(100,self.poll)
     def save(self,items):
@@ -226,12 +242,14 @@ class App(tk.Tk):
         def done(result):
             if not isinstance(result.get('creates',[]),list) or not isinstance(result.get('updates',[]),list):raise ValueError('Respuesta de IA inválida.')
             if result.get('questions'):
+                self.show_capture()
                 messagebox.showinfo('Necesito aclarar','\n'.join(result['questions'])+'\n\nAgregá tu respuesta a la entrada y volvé a interpretar.');return
             changes=[]
             for patch in result.get('creates',[]):
                 d=fresh(author=author); allowed={'title','summary','kind','owners','priority','planned','deadline','pending','questions'}; d.update({k:v for k,v in patch.items() if k in allowed})
                 similar=next((x for x in items if x['title'].casefold()==d['title'].casefold()),None)
                 if similar:
+                    self.show_capture()
                     messagebox.showinfo('Posible duplicado',f"Ya existe: {similar['title']}. Seleccionala y usá Actualizar seleccionada para unir el avance.");return
                 changes.append(d)
             for update in result.get('updates',[]):
@@ -246,12 +264,12 @@ class App(tk.Tk):
                 for p in paths:
                     dest=folder/(str(uuid.uuid4())+Path(p).suffix); shutil.copy2(p,dest)
                     for d in changes:d.setdefault('attachments',[]).append(str(dest))
-            self.store.apply(changes); self.input.delete('1.0','end'); self.files=[]; self.keep.set(False); self.refresh()
+            self.store.apply(changes); self.input.delete('1.0','end');self.store.setting('draft',''); self.files=[]; self.keep.set(False); self.change_view('Recientes')
             for d in changes:
                 if d.get('questions'):self.editor(d)
-        self.run(work,done)
+        self._processing_capture=True;self.run(work,done,on_error=self.show_capture);self.hide_capture(force=True)
     def attach(self):
-        paths=filedialog.askopenfilenames()
+        paths=filedialog.askopenfilenames(parent=self.capture_window)
         self.files.extend(paths); self.status.configure(text=f'{len(self.files)} adjuntos · se procesarán con la entrada')
     def paste_image(self):
         try:
@@ -266,7 +284,7 @@ class App(tk.Tk):
             import sounddevice as sd
             self.chunks=[]
             self.recording=sd.RawInputStream(samplerate=16000,channels=1,dtype='int16',callback=lambda data,frames,time,status:self.chunks.append(bytes(data)))
-            self.recording.start();self.status.configure(text='Grabando…');self.record_timer=self.after(3600000,lambda:self.stop(False))
+            self.recording.start();self.status.configure(text='Grabando…');self.capture_status.configure(text='Grabando… elegí transcribir o ejecutar al terminar.');self.record_timer=self.after(3600000,lambda:self.stop(False))
         except Exception as e:self.recording=None;messagebox.showerror('Micrófono',str(e))
     def stop(self,execute):
         if not self.recording:return
@@ -281,7 +299,7 @@ class App(tk.Tk):
             self.already_transcribed.add(str(path))
             if not self.keep.get():path.unlink(missing_ok=True)
             if execute:self.process()
-        self.run(lambda:transcribe(path),done)
+        self.run(lambda:transcribe(path),done,on_error=self.show_capture)
     def delete(self):
         id=self.selected()
         if id:
@@ -315,7 +333,7 @@ class App(tk.Tk):
             names=[n.strip() for n in roster.get('1.0','end').splitlines() if n.strip()]
             if names==PEOPLE:return
             if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar el equipo.',parent=window);return
-            if any(isinstance(child,tk.Toplevel) and child!=window for child in self.winfo_children()):
+            if any(isinstance(child,tk.Toplevel) and child!=window and child.state()!='withdrawn' for child in self.winfo_children()):
                 messagebox.showinfo('Equipo','Cerrá las otras ventanas del programa antes de cambiar los nombres.',parent=window);return
             preview='\n'.join(f'{old} → {new}' for old,new in zip(PEOPLE,names))
             if not messagebox.askyesno('Confirmar equipo','Se actualizarán los nombres en las tareas y el historial:\n\n'+preview+'\n\n¿Guardar estos cambios?',parent=window):return

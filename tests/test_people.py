@@ -76,7 +76,7 @@ class TeamSettingsTests(unittest.TestCase):
             try:
                 d=fresh('Conservar tarjeta');d['owners']=[PEOPLE[1]];app.store.apply([d]);app.author.set(PEOPLE[1]);app.filter_person.set(PEOPLE[1])
                 app.settings();app.update()
-                window=next(w for w in app.winfo_children() if isinstance(w,tk.Toplevel))
+                window=next(w for w in app.winfo_children() if isinstance(w,tk.Toplevel) and w.state()!='withdrawn')
                 def walk(widget):
                     for child in widget.winfo_children():
                         yield child
