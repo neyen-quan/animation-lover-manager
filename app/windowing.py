@@ -59,6 +59,9 @@ def absolute_geometry(width,height,x,y):
 
 
 def place_window(window,width=1340,height=860,parent=None):
+    if parent is not None:
+        from .theme import apply_popup_theme
+        apply_popup_theme(window)
     areas=work_areas() or [(0,0,window.winfo_screenwidth(),window.winfo_screenheight(),True)]
     point=(parent.winfo_rootx()+parent.winfo_width()/2,parent.winfo_rooty()+parent.winfo_height()/2) if parent and parent.winfo_viewable() else None
     area=choose_area(areas,point)

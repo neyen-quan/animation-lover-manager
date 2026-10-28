@@ -36,7 +36,11 @@ class PopupCenteringTests(unittest.TestCase):
     for action in [lambda:app.editor(d),app.settings,app.history,app.notify]:
      action();settle()
      window=next(w for w in app.winfo_children() if isinstance(w,tk.Toplevel) and w.state()!='withdrawn')
-     assert_centered(window);window.destroy()
+     assert_centered(window)
+     if os.getenv('ALM_SCREENSHOT') and window.title()=='Ajustes':
+      from PIL import ImageGrab
+      ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'].replace('.png','-settings-contrast.png'))
+     window.destroy()
     dialog=UpdateDialog(app,app.store,'0.3.3',Path(folder));assert_centered(dialog)
     if os.getenv('ALM_SCREENSHOT'):
      from PIL import ImageGrab

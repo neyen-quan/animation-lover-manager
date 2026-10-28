@@ -11,7 +11,8 @@ class UpdateDialog(tk.Toplevel):
     def __init__(self,parent,store,installed,root,app=None,transition=False):
         super().__init__(parent);self.withdraw()
         from .theme import apply_theme
-        apply_theme(self);self.title('Actualizar programa');self.minsize(540,360)
+        if ttk.Style(self).theme_use()!='clam':apply_theme(parent)
+        self.title('Actualizar programa');self.minsize(540,360)
         self.store=store;self.installed=installed;self.root_path=Path(root);self.app=app;self.transition=transition;self.info=None;self.q=queue.Queue();self.working=False
         self.channel=tk.StringVar(value=(f'https://github.com/neyen-quan/animation-lover-manager/releases/download/v{__version__}/latest.json' if transition else store.setting('update_channel') or u.CHANNEL))
         self.progress_text=tk.StringVar(value='Buscá una versión nueva en el canal de GitHub.')
