@@ -116,7 +116,8 @@ class TaskBoard(ttk.Frame):
     def render(self):
         if self.layout_job:self.after_cancel(self.layout_job);self.layout_job=None
         if not self.winfo_exists():return
-        self.scale=max(.4,min(float(self.tk.call('tk','scaling'))/1.333,self.canvas.winfo_width()/(850 if self.mode=='table' else 500),self.canvas.winfo_height()/205))
+        # Card sizing includes its top and bottom margins, not just the body.
+        self.scale=max(.1,min(float(self.tk.call('tk','scaling'))/1.333,self.canvas.winfo_width()/(850 if self.mode=='table' else 500),self.canvas.winfo_height()/(237 if self.mode=='cards' else 205)))
         self.fonts={key:tkfont.Font(family='Segoe UI',size=-max(7,round(size*1.333*self.scale)),weight=weight) for key,size,weight in [('normal',10,'normal'),('small',9,'normal'),('bold',10,'bold'),('heading',12,'bold'),('avatar',8,'bold'),('empty',16,'bold')]}
         self.canvas.delete('all');self.hits=[];self.shapes={};self.menu_shapes={}
         if self.mode=='cards':
