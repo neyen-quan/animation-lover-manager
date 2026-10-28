@@ -71,7 +71,17 @@ class App(tk.Tk):
         self.selected_button=submit.add(ttk.Button(submit,text='Actualizar seleccionada',command=self.process_selected))
         self.status=ttk.Label(self,text='Listo · Doble clic en una tarjeta para expandirla.',foreground=MUTED,padding=(18,7),wraplength=700);self.status.grid(row=2,column=0,sticky='ew')
         self.input.insert('1.0',self.store.setting('draft') or '');self.input.bind('<<Modified>>',self.save_draft)
-        self.refresh();self.after(100,self.poll)
+        self.refresh();self.after(100,self.poll);self.after(1500,self.show_update_result)
+    def show_update_result(self):
+        receipt=self.store.path.parent/'last-update.json'
+        if not receipt.exists():return
+        try:
+            result=json.loads(receipt.read_text());key=result.get('id') or str(receipt.stat().st_mtime_ns)
+            if self.store.setting('update_result_seen')==key:return
+            self.store.setting('update_result_seen',key)
+            if result.get('success'):self.status.configure(text='Actualización instalada · Versión '+str(result.get('to')))
+            else:messagebox.showwarning('Actualización revertida',result.get('error','No se pudo actualizar. Se conservó la versión anterior.'))
+        except (OSError,ValueError):pass
     def process_selected(self):
         target=self.selected()
         if not target:messagebox.showinfo('Elegí una tarjeta','Seleccioná la tarjeta que querés actualizar.');return
@@ -240,7 +250,7 @@ class App(tk.Tk):
         window=tk.Toplevel(self);window.title('Ajustes');window.geometry('650x600');window.minsize(480,360);window.configure(bg=BG)
         area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body
         ttk.Label(w,text='Personas del equipo (una por línea). Guardar y reiniciar.').pack(pady=8)
-        roster=tk.Text(w,height=5);roster.insert('1.0','\n'.join(PEOPLE));roster.pack(fill='x',padx=12)
+        roster=tk.Text(w,height=5,bg=CARD,fg=FG,insertbackground=FG,font=('Segoe UI',11),padx=10,pady=8);roster.insert('1.0','\n'.join(PEOPLE));roster.pack(fill='x',padx=12)
         def save_people():
             names=[n.strip() for n in roster.get('1.0','end').splitlines() if n.strip()]
             if not names or len(names)!=len(set(names)):messagebox.showerror('Equipo','Ingresá nombres distintos.');return

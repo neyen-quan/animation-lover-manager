@@ -241,7 +241,7 @@ def worker(jobfile):
     while not (base/'go').exists():
         if time.monotonic()>deadline:return 2
         time.sleep(.1)
-    result={'success':False,'from':job['from'],'to':job['to']}
+    result={'id':base.name,'success':False,'from':job['from'],'to':job['to']}
     child=None
     try:
         wait_pid(job.get('pid'))
