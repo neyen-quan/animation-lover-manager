@@ -10,6 +10,12 @@ Gestor personal para Windows: ideas, tareas, roadmap y notas. Los datos del equi
 
 **Transición única desde 0.1.0:** su botón Versiones solo abre el navegador; ese código no puede instalar una actualización. Desde esa página descargar únicamente `ActualizarAnimationLover.exe`, cerrar el programa anterior y ejecutar ese asistente. Seleccionar el `AnimationLoverManager.exe` original. El asistente consulta GitHub, verifica y descarga el paquete, y actualiza en la misma carpeta. No es necesario volver a descargar manualmente la aplicación completa. Desde entonces se usa el botón interno.
 
+## Tablero visual
+
+Modo oscuro con tabla agrupada por estado y vista de tarjetas sobre la misma información. La selección, los filtros y la alternancia de vistas no modifican las tareas. Las filas se abren con doble clic; las tarjetas, con un clic. Al pasar el mouse se resalta el elemento y aparece información ampliada; el menú de tres puntos ofrece las acciones existentes.
+
+La entrada de voz, texto y archivos se abre desde **Soltar idea**. La captura puede plegarse para dedicar la ventana al tablero. Las barras de desplazamiento aparecen cuando el contenido lo necesita.
+
 ## Integridad y recuperación
 
 El canal predeterminado es `https://github.com/neyen-quan/animation-lover-manager/releases/latest/download/latest.json`.

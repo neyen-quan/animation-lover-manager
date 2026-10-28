@@ -6,13 +6,14 @@ from .core import Store, PEOPLE, KINDS, STATES, ALIASES, fresh, today, urgency
 from .ai import interpret, transcribe
 
 from . import __version__
-from .theme import BG, CARD, FG, MUTED, ACCENT, apply_theme
+from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, SHELL, apply_theme
 from .widgets import ScrollArea, WrapBar
+from .board import TaskBoard
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__(); self.title('Animation Lover · Gestión · '+__version__)
-        self.geometry(f"{min(1180,self.winfo_screenwidth()-70)}x{min(820,self.winfo_screenheight()-90)}");self.minsize(740,480)
+        self.geometry(f"{min(1340,self.winfo_screenwidth()-64)}x{min(860,self.winfo_screenheight()-90)}");self.minsize(780,520)
         apply_theme(self)
         import sys
         icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets/icon.png'
@@ -21,47 +22,58 @@ class App(tk.Tk):
         self.jobs=queue.Queue();self.files=[];self.tempfiles=[];self.recording=None;self.busy=False
         self.protocol('WM_DELETE_WINDOW',self.close)
         self.view=tk.StringVar(value='Hoy');self.author=tk.StringVar(value=PEOPLE[0]);self.filter_person=tk.StringVar(value='Todos');self.keep=tk.BooleanVar();self.search=tk.StringVar()
-        self.columnconfigure(0,weight=1);self.rowconfigure(1,weight=1)
-        header=ttk.Frame(self,padding=(18,12));header.grid(row=0,column=0,sticky='ew');header.columnconfigure(0,weight=1)
-        ttk.Label(header,text='Animation Lover',font=('Segoe UI',19,'bold')).grid(row=0,column=0,sticky='w')
-        self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=1,padx=8)
-        ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=2)
-        self.area=ScrollArea(self);self.area.grid(row=1,column=0,sticky='nsew')
-        layout=self.area.body;layout.columnconfigure(1,weight=1);layout.rowconfigure(0,weight=1)
-        nav=ttk.Frame(layout,padding=(12,10));nav.grid(row=0,column=0,sticky='ns')
-        ttk.Label(nav,text='MI ESPACIO',foreground=MUTED,font=('Segoe UI',9,'bold')).pack(anchor='w',padx=10,pady=(0,8))
-        for v in ['Hoy','Todas','Por persona','Recientes','Idea','Roadmap','Nota','Papelera']:
-            ttk.Button(nav,text=v,style='Nav.TButton',width=13,command=lambda x=v:self.change_view(x)).pack(fill='x',pady=2)
-        ttk.Separator(nav).pack(fill='x',pady=12)
+        self.columnconfigure(1,weight=1);self.rowconfigure(1,weight=1)
+        header=ttk.Frame(self,padding=(20,12),style='Shell.TFrame');header.grid(row=0,column=0,columnspan=2,sticky='ew');header.columnconfigure(0,weight=1)
+        ttk.Label(header,text='Animation Lover',style='Shell.TLabel',font=('Segoe UI',14,'bold')).grid(row=0,column=0,sticky='w')
+        self.capture_button=ttk.Button(header,text='+ Soltar idea',command=self.toggle_capture);self.capture_button.grid(row=0,column=1,padx=5)
+        self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=2,padx=5)
+        ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=3,padx=(5,0))
+        sidebar=tk.Frame(self,bg=BG,width=round(190*max(.85,float(self.tk.call('tk','scaling'))/1.333)));sidebar.grid(row=1,column=0,sticky='ns');sidebar.grid_propagate(False);sidebar.rowconfigure(0,weight=1);sidebar.columnconfigure(0,weight=1)
+        navarea=ScrollArea(sidebar);navarea.grid(row=0,column=0,sticky='nsew');navarea.canvas.configure(width=160)
+        nav=ttk.Frame(navarea.body,padding=(14,20));nav.pack(fill='both',expand=True)
+        ttk.Label(nav,text='ESPACIO PERSONAL',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(0,15))
+        self.nav_buttons={}
+        for v,label in [('Hoy','Mi día'),('Todas','Mi tablero'),('Por persona','Por persona'),('Recientes','Recientes')]:
+            button=ttk.Button(nav,text=label,style='Nav.TButton',command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
+        ttk.Label(nav,text='ORGANIZACIÓN',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(25,10))
+        for v,label in [('Idea','Ideas'),('Roadmap','Roadmap'),('Nota','Notas'),('Papelera','Papelera')]:
+            button=ttk.Button(nav,text=label,style='Nav.TButton',command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
+        ttk.Separator(nav).pack(fill='x',pady=20)
         ttk.Button(nav,text='Finanzas · luego',style='Nav.TButton',command=self.finance).pack(fill='x')
-        ttk.Label(nav,text='Versión '+__version__,foreground=MUTED).pack(anchor='w',padx=10,pady=16)
-        content=ttk.Frame(layout,padding=(8,6,16,10));content.grid(row=0,column=1,sticky='nsew');content.columnconfigure(0,weight=1);content.rowconfigure(3,weight=1)
-        ttk.Label(content,textvariable=self.view,font=('Segoe UI',20,'bold')).grid(row=0,column=0,sticky='w',pady=(0,5))
-        self.summary=ttk.Label(content,foreground=MUTED,wraplength=600);self.summary.grid(row=1,column=0,sticky='ew',pady=(0,10))
-        filters=WrapBar(content);filters.grid(row=2,column=0,sticky='ew',pady=(0,8))
-        filters.add(ttk.Entry(filters,textvariable=self.search,width=24))
+        ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8)).pack(anchor='w',padx=10,pady=24)
+        self.area=ScrollArea(self);self.area.grid(row=1,column=1,sticky='nsew')
+        content=ttk.Frame(self.area.body,padding=(22,22,24,18));content.pack(fill='both',expand=True)
+        content.columnconfigure(0,weight=1);content.rowconfigure(5,weight=1)
+        self.page_title=ttk.Label(content,text='Mi día',font=('Segoe UI',25,'bold'));self.page_title.grid(row=0,column=0,sticky='w')
+        self.summary=ttk.Label(content,foreground=MUTED);self.summary.grid(row=1,column=0,sticky='ew',pady=(5,20))
+        stats=ttk.Frame(content);stats.grid(row=2,column=0,sticky='ew',pady=(0,20));self.metrics={}
+        for index,(key,label,color) in enumerate([('pending','POR HACER','#a7afff'),('running','EN CURSO','#fdab3d'),('overdue','VENCIDAS','#f07188')]):
+            stats.columnconfigure(index,weight=1,uniform='metric')
+            tile=tk.Frame(stats,bg=SURFACE,highlightthickness=1,highlightbackground=LINE,padx=16,pady=10);tile.grid(row=0,column=index,sticky='ew',padx=(0,10 if index<2 else 0))
+            number=tk.Label(tile,text='0',font=('Segoe UI',21,'bold'),bg=SURFACE,fg=color);number.pack(anchor='w')
+            caption=tk.Label(tile,text=label,font=('Segoe UI',8,'bold'),bg=SURFACE,fg=MUTED,justify='left');caption.pack(anchor='w',pady=(3,0))
+            tile.bind('<Configure>',lambda e,c=caption:c.configure(wraplength=max(50,e.width-32)));self.metrics[key]=number
+        tabs=WrapBar(content);tabs.grid(row=3,column=0,sticky='ew',pady=(0,8));self.layout_buttons={}
+        for mode,label in [('table','Tabla principal'),('cards','Tarjetas')]:self.layout_buttons[mode]=tabs.add(ttk.Button(tabs,text=label,style='Tab.TButton',command=lambda m=mode:self.set_layout(m)))
+        filters=WrapBar(content);filters.grid(row=4,column=0,sticky='ew',pady=(0,12))
+        filters.add(ttk.Button(filters,text='+ Nueva tarjeta',style='Accent.TButton',command=lambda:self.editor(fresh())))
+        filters.add(ttk.Label(filters,text='Buscar'))
+        filters.add(ttk.Entry(filters,textvariable=self.search,width=18))
         box=filters.add(ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12));box.bind('<<ComboboxSelected>>',lambda e:self.refresh())
-        filters.add(ttk.Button(filters,text='+ Nueva tarjeta',command=lambda:self.editor(fresh())))
         filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
-        self.search.trace_add('write',lambda *a:self.refresh())
-        table=ttk.Frame(content);table.grid(row=3,column=0,sticky='nsew');table.columnconfigure(0,weight=1);table.rowconfigure(0,weight=1)
-        cols=('title','kind','owners','status','deadline','priority')
-        self.tree=ttk.Treeview(table,columns=cols,show='headings',selectmode='browse',height=5)
-        for key,label,width in zip(cols,['Pendiente / idea','Tipo','Responsables','Estado','Límite','Prioridad'],[290,90,130,110,100,90]):
-            self.tree.heading(key,text=label);self.tree.column(key,width=width,minwidth=70,stretch=key=='title')
-        self.tree.tag_configure('late',foreground='#ff879a');self.tree.tag_configure('warning',foreground='#f4c77d')
-        self.tree.grid(row=0,column=0,sticky='nsew')
-        sy=ttk.Scrollbar(table,orient='vertical',command=self.tree.yview);sy.grid(row=0,column=1,sticky='ns')
-        sx=ttk.Scrollbar(table,orient='horizontal',command=self.tree.xview);sx.grid(row=1,column=0,sticky='ew');self.tree.configure(yscrollcommand=sy.set,xscrollcommand=sx.set)
-        self.tree.bind('<Double-1>',lambda e:self.open_selected())
-        actions=WrapBar(content);actions.grid(row=4,column=0,sticky='ew',pady=7)
-        for title,cmd in [('Abrir / editar',self.open_selected),('Notificar',self.notify),('Eliminar / restaurar',self.delete),('Historial',self.history),('Deshacer',self.undo)]:actions.add(ttk.Button(actions,text=title,command=cmd))
-        capture=ttk.Frame(content,padding=(0,10));capture.grid(row=5,column=0,sticky='ew');capture.columnconfigure(0,weight=1)
-        ttk.Label(capture,text='¿Qué tenés en mente?',font=('Segoe UI',14,'bold')).grid(row=0,column=0,sticky='w')
-        ttk.Label(capture,text='Escribí una idea, pegá una captura o contá un avance.',foreground=MUTED).grid(row=1,column=0,sticky='w',pady=(3,7))
-        self.input=tk.Text(capture,height=4,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('Segoe UI',11),wrap='word',padx=12,pady=10)
+        self.board=TaskBoard(content,self.open_selected,lambda:self.editor(fresh()),self.board_action);self.board.grid(row=5,column=0,sticky='nsew')
+        self.tree=self.board
+        actions=WrapBar(content);actions.grid(row=6,column=0,sticky='ew',pady=(9,0))
+        for title,cmd in [('Abrir tarjeta',self.open_selected),('Preparar mensaje',self.notify),('Historial',self.history),('Deshacer',self.undo)]:actions.add(ttk.Button(actions,text=title,command=cmd))
+        self.capture_visible=False
+        self.capture=ttk.Frame(content,padding=(0,20));capture=self.capture;capture.grid(row=7,column=0,sticky='ew');capture.columnconfigure(0,weight=1)
+        capture_header=ttk.Frame(capture);capture_header.grid(row=0,column=0,sticky='ew');capture_header.columnconfigure(0,weight=1)
+        ttk.Label(capture_header,text='Soltá una idea',font=('Segoe UI',17,'bold')).grid(row=0,column=0,sticky='w')
+        ttk.Button(capture_header,text='Cerrar captura',command=self.toggle_capture).grid(row=0,column=1)
+        ttk.Label(capture,text='Texto, voz o capturas. Contalo con tus palabras.',foreground=MUTED).grid(row=1,column=0,sticky='w',pady=(4,10))
+        self.input=tk.Text(capture,height=4,bg=SURFACE,fg=FG,insertbackground=FG,relief='flat',highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT,font=('Segoe UI',11),wrap='word',padx=14,pady=12)
         self.input.grid(row=2,column=0,sticky='ew')
-        toolbar=WrapBar(capture);toolbar.grid(row=3,column=0,sticky='ew',pady=5)
+        toolbar=WrapBar(capture);toolbar.grid(row=3,column=0,sticky='ew',pady=7)
         toolbar.add(ttk.Label(toolbar,text='Idea de'))
         toolbar.add(ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=12))
         toolbar.add(ttk.Checkbutton(toolbar,text='Conservar adjuntos',variable=self.keep))
@@ -69,9 +81,26 @@ class App(tk.Tk):
         submit=WrapBar(capture);submit.grid(row=4,column=0,sticky='ew')
         self.interpret_button=submit.add(ttk.Button(submit,text='Interpretar entrada',style='Accent.TButton',command=self.process))
         self.selected_button=submit.add(ttk.Button(submit,text='Actualizar seleccionada',command=self.process_selected))
-        self.status=ttk.Label(self,text='Listo · Doble clic en una tarjeta para expandirla.',foreground=MUTED,padding=(18,7),wraplength=700);self.status.grid(row=2,column=0,sticky='ew')
+        self.capture.grid_remove()
+        self.status=ttk.Label(self,text='Listo · Seleccioná una tarea o tocá Soltar idea.',foreground=MUTED,padding=(20,8),wraplength=700);self.status.grid(row=2,column=0,columnspan=2,sticky='ew')
         self.input.insert('1.0',self.store.setting('draft') or '');self.input.bind('<<Modified>>',self.save_draft)
-        self.refresh();self.after(100,self.poll);self.after(1500,self.show_update_result)
+        self.search.trace_add('write',lambda *a:self.refresh())
+        self.set_layout(self.store.setting('board_layout') or 'table');self.refresh();self._poll_job=self.after(100,self.poll);self._result_job=self.after(1500,self.show_update_result)
+    def toggle_capture(self):
+        if self.capture_visible and self.recording:messagebox.showinfo('Grabando','Detené la grabación antes de cerrar la captura.');return
+        self.capture_visible=not self.capture_visible
+        if self.capture_visible:
+            self.capture.grid();self.input.focus_set();self._capture_scroll_job=self.after(80,lambda:self.area.canvas.yview_moveto(1))
+        else:self.capture.grid_remove()
+        self.capture_button.configure(text='Cerrar captura' if self.capture_visible else '+ Soltar idea')
+    def set_layout(self,mode):
+        mode=mode if mode in ('table','cards') else 'table'
+        self.board.set_mode(mode);self.store.setting('board_layout',mode)
+        for key,button in self.layout_buttons.items():button.configure(style='Active.Tab.TButton' if key==mode else 'Tab.TButton')
+    def board_action(self,action):
+        if action=='open':self.open_selected()
+        elif action=='notify':self.notify()
+        elif action=='delete':self.delete()
     def show_update_result(self):
         receipt=self.store.path.parent/'last-update.json'
         if not receipt.exists():return
@@ -90,6 +119,13 @@ class App(tk.Tk):
         if self.input.edit_modified():
             self.store.setting('draft',self.input.get('1.0','end').strip())
             self.input.edit_modified(False)
+    def destroy(self):
+        for name in ('_poll_job','_result_job','_capture_scroll_job','record_timer'):
+            job=getattr(self,name,None)
+            if job:
+                try:self.after_cancel(job)
+                except tk.TclError:pass
+        super().destroy()
     def close(self):
         if self.busy or self.recording:
             messagebox.showinfo('Operación en curso','Esperá a que termine el procesamiento o detené la grabación.'); return
@@ -98,17 +134,24 @@ class App(tk.Tk):
     def change_view(self,v): self.view.set(v); self.refresh()
     def selected(self): return self.tree.selection()[0] if self.tree.selection() else None
     def refresh(self):
-        items=self.store.items(self.view.get()=='Papelera'); q=self.search.get().casefold(); who=self.filter_person.get(); view=self.view.get()
+        view=self.view.get();items=self.store.items(view=='Papelera');q=self.search.get().casefold();who=self.filter_person.get()
         active=[d for d in self.store.items() if d['status']!='Terminado']
-        self.summary.configure(text=f"Hoy, {today().strftime('%d/%m/%Y')}  ·  {len(active)} pendientes  ·  {sum(urgency(d)==3 for d in active)} vencidos  ·  {sum(bool(d.get('questions')) for d in active)} por aclarar")
-        self.tree.delete(*self.tree.get_children())
-        for d in sorted(items,key=lambda d:(-urgency(d),d['deadline'])) if view!='Recientes' else sorted(items,key=lambda d:d['updated'],reverse=True):
+        self.metrics['pending'].configure(text=str(sum(d['status']=='Pendiente' for d in active)))
+        self.metrics['running'].configure(text=str(sum(d['status']=='En curso' for d in active)))
+        self.metrics['overdue'].configure(text=str(sum(urgency(d)==3 for d in active)))
+        labels={'Hoy':'Mi día','Todas':'Mi tablero','Idea':'Ideas','Nota':'Notas'}
+        self.page_title.configure(text=labels.get(view,view))
+        for key,button in self.nav_buttons.items():button.configure(style='Active.Nav.TButton' if key==view else 'Nav.TButton')
+        filtered=[]
+        for d in sorted(items,key=lambda d:d['updated'],reverse=True) if view=='Recientes' else sorted(items,key=lambda d:(-urgency(d),d['deadline'])):
             if view=='Hoy' and (d['status']=='Terminado' or d['planned']>today().isoformat()):continue
             if view in KINDS and d['kind']!=view:continue
             if who!='Todos' and who not in d['owners']:continue
             if q and q not in json.dumps(d,ensure_ascii=False).casefold():continue
-            u=urgency(d); title=('⚠ ' if d.get('questions') else '')+d['title']
-            self.tree.insert('', 'end',iid=d['id'],values=(title,d['kind'],', '.join(d['owners']) or 'Por asignar',d['status'],d['deadline'],'MÁXIMA' if u==3 else d['priority']),tags=('late' if u==3 else 'warning' if u==2 else '',))
+            filtered.append(d)
+        self.summary.configure(text=f"{today().strftime('%d/%m/%Y')}   ·   {len(filtered)} elementos en esta vista   ·   {sum(bool(d.get('questions')) for d in active)} por aclarar")
+        self.board.group_mode='recent' if view=='Recientes' else 'status'
+        self.board.set_items(filtered)
     def run(self,work,done):
         if self.busy:return
         self.busy=True; self.status.configure(text='Procesando…')
@@ -124,7 +167,7 @@ class App(tk.Tk):
                 try:done(result); self.status.configure(text='Listo · Podés deshacer el último cambio.')
                 except Exception as e:messagebox.showerror('Revisar',str(e))
         except queue.Empty:pass
-        self.after(100,self.poll)
+        self._poll_job=self.after(100,self.poll)
     def save(self,items):
         try:self.store.apply(items)
         except Exception as e:messagebox.showerror('Guardar',str(e))
@@ -134,23 +177,38 @@ class App(tk.Tk):
         id=self.selected()
         if id:self.editor(self.store.get(id))
     def editor(self,data):
-        window=tk.Toplevel(self);window.title('Detalle de tarjeta');window.geometry('700x650');window.minsize(480,360);window.configure(bg=BG)
-        area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body;fields={}
-        for key,label,values in [('title','Título',None),('kind','Tipo',KINDS),('status','Estado',STATES),('author','Idea de',PEOPLE),('owners','Responsables (separados por coma)',None),('priority','Prioridad',['Baja','Media','Alta','Máxima']),('planned','Fecha prevista · AAAA-MM-DD',None),('deadline','Fecha límite · AAAA-MM-DD o AAAA-MM',None)]:
-            ttk.Label(w,text=label).pack(anchor='w',padx=18)
-            var=tk.StringVar(value=', '.join(data[key]) if key=='owners' else data[key]); fields[key]=var
-            widget=ttk.Combobox(w,textvariable=var,values=values,state='readonly') if values else ttk.Entry(w,textvariable=var)
-            widget.pack(fill='x',padx=18,pady=3)
-        ttk.Label(w,text='Resumen').pack(anchor='w',padx=18)
-        summary=tk.Text(w,height=4,bg=CARD,fg=FG,insertbackground=FG,wrap='word'); summary.insert('1.0',data['summary']); summary.pack(fill='x',padx=18)
-        ttk.Label(w,text='Pendientes (uno por línea)').pack(anchor='w',padx=18)
-        pending=tk.Text(w,height=3,bg=CARD,fg=FG,insertbackground=FG); pending.insert('1.0','\n'.join(data.get('pending',[]))); pending.pack(fill='x',padx=18)
-        if data.get('questions'):ttk.Label(w,text='Por aclarar: '+' / '.join(data['questions']),wraplength=680).pack(padx=18,pady=8)
+        window=tk.Toplevel(self);window.title('Detalle de tarjeta');window.configure(bg=BG)
+        window.geometry(f"{min(760,self.winfo_screenwidth()-100)}x{min(780,self.winfo_screenheight()-110)}");window.minsize(480,400)
+        header=ttk.Frame(window,padding=(24,20));header.pack(fill='x')
+        ttk.Label(header,text='Detalle de tarjeta',font=('Segoe UI',20,'bold')).pack(anchor='w')
+        ttk.Label(header,text='Organizá el trabajo y lo que falta hacer.',foreground=MUTED).pack(anchor='w',pady=(5,0))
+        footer=ttk.Frame(window,padding=(24,14));footer.pack(side='bottom',fill='x')
+        area=ScrollArea(window);area.pack(fill='both',expand=True)
+        body=ttk.Frame(area.body,padding=(24,4,24,20));body.pack(fill='both',expand=True)
+        fields={}
+        ttk.Label(body,text='TÍTULO',foreground=MUTED,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(0,7))
+        fields['title']=tk.StringVar(value=data['title']);ttk.Entry(body,textvariable=fields['title'],font=('Segoe UI',13,'bold')).pack(fill='x')
+        ttk.Label(body,text='RESUMEN',foreground=MUTED,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(22,7))
+        summary=tk.Text(body,height=4,bg=SURFACE,fg=FG,insertbackground=FG,highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT,relief='flat',font=('Segoe UI',11),wrap='word',padx=12,pady=10)
+        summary.insert('1.0',data['summary']);summary.pack(fill='x')
+        ttk.Label(body,text='Organización',font=('Segoe UI',13,'bold')).pack(anchor='w',pady=(24,12))
+        props=ttk.Frame(body);props.pack(fill='x');props.columnconfigure(0,weight=1,uniform='field');props.columnconfigure(1,weight=1,uniform='field')
+        for index,(key,label,values) in enumerate([('kind','Tipo',KINDS),('status','Estado',STATES),('author','Idea de',PEOPLE),('owners','Responsables · separados por coma',None),('priority','Prioridad',['Baja','Media','Alta','Máxima']),('planned','Fecha prevista · AAAA-MM-DD',None),('deadline','Fecha límite · AAAA-MM-DD o AAAA-MM',None)]):
+            field=ttk.Frame(props,padding=(0,0,12,12));field.grid(row=index//2,column=index%2,sticky='ew');field.columnconfigure(0,weight=1)
+            ttk.Label(field,text=label,foreground=MUTED,wraplength=280).grid(row=0,column=0,sticky='w',pady=(0,6))
+            var=tk.StringVar(value=', '.join(data[key]) if key=='owners' else data[key]);fields[key]=var
+            widget=ttk.Combobox(field,textvariable=var,values=values,state='readonly') if values else ttk.Entry(field,textvariable=var)
+            widget.grid(row=1,column=0,sticky='ew')
+        ttk.Label(body,text='PENDIENTES',foreground=MUTED,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(15,7))
+        pending=tk.Text(body,height=4,bg=SURFACE,fg=FG,insertbackground=FG,highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT,relief='flat',font=('Segoe UI',11),wrap='word',padx=12,pady=10)
+        pending.insert('1.0','\n'.join(data.get('pending',[])));pending.pack(fill='x')
+        if data.get('questions'):ttk.Label(body,text='Por aclarar: '+' / '.join(data['questions']),foreground='#fdab3d',wraplength=580).pack(fill='x',pady=15)
         def commit():
-            d=copy.deepcopy(data); d.update({k:v.get() for k,v in fields.items()}); d['owners']=[p.strip() for p in d['owners'].split(',') if p.strip()]; d['summary']=summary.get('1.0','end').strip(); d['pending']=pending.get('1.0','end').strip().splitlines()
-            try:self.store.apply([d]); self.refresh(); window.destroy()
+            d=copy.deepcopy(data);d.update({k:v.get() for k,v in fields.items()});d['owners']=[p.strip() for p in d['owners'].split(',') if p.strip()];d['summary']=summary.get('1.0','end').strip();d['pending']=pending.get('1.0','end').strip().splitlines()
+            try:self.store.apply([d]);self.refresh();window.destroy()
             except Exception as e:messagebox.showerror('Revisar tarjeta',str(e),parent=window)
-        ttk.Button(w,text='Guardar',command=commit).pack(pady=12)
+        ttk.Button(footer,text='Guardar cambios',style='Accent.TButton',command=commit).pack(side='right')
+        ttk.Button(footer,text='Cancelar',command=window.destroy).pack(side='right',padx=8)
     def process(self,target=None):
         if self.busy:return
         text=self.input.get('1.0','end').strip(); author=self.author.get(); items=self.store.items(); model=self.store.setting('model'); paths=list(self.files); keep=self.keep.get()

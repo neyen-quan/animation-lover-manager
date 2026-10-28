@@ -7,7 +7,7 @@ class LayoutTests(unittest.TestCase):
   faulthandler.dump_traceback_later(30,repeat=True)
   from app.main import App
   with tempfile.TemporaryDirectory() as tmp:
-   os.environ['LOCALAPPDATA']=tmp;app=App()
+   os.environ['LOCALAPPDATA']=tmp;app=App();app.toggle_capture()
    try:
     for scaling in [1.333,1.667,2.0,2.667]:
      print('Escala de interfaz:',scaling,flush=True)
@@ -26,6 +26,7 @@ class LayoutTests(unittest.TestCase):
      self.assertLessEqual(dialog.local_btn.winfo_rooty()+dialog.local_btn.winfo_height(),dialog.area.canvas.winfo_rooty()+dialog.area.canvas.winfo_height()+1)
     dialog.destroy()
     app.tk.call('tk','scaling',1.333);app.geometry(f'{min(1180,app.winfo_screenwidth()-80)}x{min(820,app.winfo_screenheight()-100)}');app.update();app.area.canvas.yview_moveto(1);app.update()
+    app.toggle_capture();app.area.canvas.yview_moveto(0);app.update()
     if os.getenv('ALM_SCREENSHOT'):
      from PIL import ImageGrab
      ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'])

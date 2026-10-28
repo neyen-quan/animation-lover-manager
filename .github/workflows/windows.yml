@@ -97,7 +97,7 @@ jobs:
         if: always()
         with:
           name: revision-windows
-          path: interfaz-windows.png
+          path: interfaz-windows*.png
           if-no-files-found: ignore
       - name: Publicar todos los archivos antes de habilitar latest
         if: steps.plan.outputs.publish == 'true'

@@ -1,12 +1,19 @@
 import tkinter as tk
 from tkinter import ttk
 
+class AutoScrollbar(ttk.Scrollbar):
+    def set(self,first,last):
+        if float(first)<=0.00001 and float(last)>=0.99999:
+            if self.winfo_manager():self.grid_remove()
+        elif not self.winfo_manager():self.grid()
+        super().set(first,last)
+
 class ScrollArea(ttk.Frame):
     """Contenido desplazable: controles accesibles aun con escala de Windows alta."""
     def __init__(self,parent,**kw):
         super().__init__(parent,**kw)
-        self.canvas=tk.Canvas(self,bg='#10131d',highlightthickness=0)
-        self.vbar=ttk.Scrollbar(self,orient='vertical',command=self.canvas.yview)
+        self.canvas=tk.Canvas(self,bg='#181b30',highlightthickness=0)
+        self.vbar=AutoScrollbar(self,orient='vertical',command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.vbar.set)
         self.canvas.grid(row=0,column=0,sticky='nsew');self.vbar.grid(row=0,column=1,sticky='ns')
         self.rowconfigure(0,weight=1);self.columnconfigure(0,weight=1)
