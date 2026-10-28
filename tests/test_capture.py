@@ -48,6 +48,10 @@ class CaptureTests(unittest.TestCase):
     for i in range(35):
      d=fresh(f'Tarea {i}');d['status']=['Pendiente','En curso','Esperando','Terminado'][i%4];tasks.append(d)
     app.store.apply(tasks);app.change_view('Todas');app.geometry('1100x740');app.update()
+    # Windows applies/clamps native geometry asynchronously; wait for the
+    # initial centering pass before measuring each page's visible bounds.
+    until=time.monotonic()+.2
+    while time.monotonic()<until:app.update();time.sleep(.01)
     for mode in ['table','cards']:
      app.set_layout(mode);app.update();board=app.board
      seen=set()
