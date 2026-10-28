@@ -1,4 +1,5 @@
 import copy
+from contextlib import closing
 import json
 import os
 import sqlite3
@@ -40,7 +41,7 @@ class PeopleTests(unittest.TestCase):
         finally:second.db.close()
         recoverable=False
         for path in (self.store.path.parent/'backups').glob('*.sqlite3'):
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db:
                 value=db.execute('SELECT data FROM items WHERE id=?',(a['id'],)).fetchone()
                 recoverable|=bool(value and json.loads(value[0])['author']==self.people[0])
         self.assertTrue(recoverable)
