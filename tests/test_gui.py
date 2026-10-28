@@ -25,7 +25,7 @@ class LayoutTests(unittest.TestCase):
      dialog.area.canvas.yview_moveto(1);app.update()
      self.assertLessEqual(dialog.local_btn.winfo_rooty()+dialog.local_btn.winfo_height(),dialog.area.canvas.winfo_rooty()+dialog.area.canvas.winfo_height()+1)
     dialog.destroy()
-    app.tk.call('tk','scaling',1.333);app.geometry('1180x820');app.update();app.area.canvas.yview_moveto(0);app.update()
+    app.tk.call('tk','scaling',1.333);app.geometry(f'{min(1180,app.winfo_screenwidth()-80)}x{min(820,app.winfo_screenheight()-100)}');app.update();app.area.canvas.yview_moveto(1);app.update()
     if os.getenv('ALM_SCREENSHOT'):
      from PIL import ImageGrab
      ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'])

@@ -1,9 +1,7 @@
-Interfaz reorganizada con controles adaptables y desplazamiento para escalas altas de Windows.
+Versión de comprobación del actualizador online desde 0.2.0.
 
-Actualizar programa → Buscar actualizaciones → Descargar e instalar.
+Incluye parche incremental, pruebas del parche contra el paquete publicado anterior y avisos de resultado tras el reinicio. Se incluyen también licencia e instrucciones en el paquete.
 
-Verificación SHA-256, producto, versiones y rutas; respaldo de los archivos modificados, reinicio comprobado y reversión ante fallo. Canal configurable y alternativa ZIP local.
+Desde 0.2.0: Actualizar programa → Buscar actualizaciones → Descargar e instalar. El programa debe reiniciarse mostrando 0.2.1; otra búsqueda debe indicar que ya está actualizado.
 
-Primera transición desde 0.1.0: abrir Versiones, descargar ActualizarAnimationLover.exe de esta release y ejecutarlo con el programa cerrado. Seleccionar el AnimationLoverManager.exe original. El asistente descarga y aplica el paquete en esa misma ubicación. Las próximas versiones se actualizan desde el botón del programa.
-
-Los datos y la configuración permanecen en el perfil local del usuario. La interpretación por IA sigue requiriendo el modelo local configurado.
+Los datos y la configuración permanecen en el perfil del usuario. La interpretación por IA sigue requiriendo el modelo local configurado.

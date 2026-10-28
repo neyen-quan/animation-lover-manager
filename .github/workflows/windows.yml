@@ -45,6 +45,9 @@ jobs:
           python -m PyInstaller --noconfirm --windowed --onedir --name AnimationLoverManager --icon assets/icon.ico --add-data "assets;assets" --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers --collect-all sounddevice run.py
           python -m PyInstaller --noconfirm --windowed --onefile --name ActualizarAnimationLover --icon assets/icon.ico update_worker.py
           Copy-Item dist/ActualizarAnimationLover.exe dist/AnimationLoverManager/ActualizarAnimationLover.exe
+          New-Item -ItemType Directory dist/AnimationLoverManager/_internal/legal -Force | Out-Null
+          Copy-Item LICENSE dist/AnimationLoverManager/_internal/legal/LICENSE-AnimationLover.txt
+          Copy-Item README.md dist/AnimationLoverManager/_internal/legal/README.md
       - name: Obtener paquete anterior para el delta
         if: steps.plan.outputs.publish == 'true'
         shell: pwsh
@@ -79,6 +82,17 @@ jobs:
         if: steps.plan.outputs.publish == 'true'
         timeout-minutes: 4
         run: python scripts/test_packaged_update.py dist/AnimationLoverManager release/AnimationLoverManager-Actualizar-${{ steps.plan.outputs.version }}.zip
+      - name: Probar parche real desde la versión publicada anterior
+        if: steps.plan.outputs.publish == 'true'
+        timeout-minutes: 4
+        shell: pwsh
+        run: |
+          $previous=Get-ChildItem previous -Filter '*.zip' | Select-Object -First 1
+          $patch=Get-ChildItem release -Filter '*-Parche-*.zip' | Select-Object -First 1
+          if ($previous -and $patch) {
+            python scripts/test_packaged_update.py dist/AnimationLoverManager $patch.FullName $previous.FullName
+            if ($LASTEXITCODE -ne 0) { throw 'Falló la actualización incremental real' }
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

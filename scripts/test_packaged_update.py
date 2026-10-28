@@ -1,5 +1,5 @@
 """Prueba Windows: helper real, reemplazo, reinicio y datos conservados."""
-import json,os,shutil,sqlite3,subprocess,sys,tempfile,time
+import json,os,shutil,sqlite3,subprocess,sys,tempfile,time,zipfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app import __version__
@@ -21,15 +21,30 @@ def main():
     if os.name!='nt':return
     distribution=Path(sys.argv[1]).resolve();package=Path(sys.argv[2]).resolve()
     with tempfile.TemporaryDirectory() as folder:
-        base=Path(folder);root=base/'installed';shutil.copytree(distribution,root)
+        base=Path(folder);root=base/'installed'
+        if len(sys.argv)>3:
+            from app.updater import safe_path,inventory
+            root.mkdir()
+            with zipfile.ZipFile(sys.argv[3]) as z:
+                for entry in z.infolist():
+                    if entry.is_dir():continue
+                    prefix=PRODUCT+'/'
+                    if not entry.filename.startswith(prefix):raise ValueError('Paquete base incorrecto')
+                    rel=entry.filename[len(prefix):]
+                    if rel!='installation.json':safe_path(rel)
+                    dest=root/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(entry))
+            base_info=json.loads((root/'installation.json').read_text())
+            assert base_info['product']==PRODUCT
+            for rel,record in inventory(base_info['files']).items():assert digest(root/rel)==record['sha256']
+        else:shutil.copytree(distribution,root)
         data=base/'profile';os.environ['LOCALAPPDATA']=str(data)
-        info=json.loads((root/'installation.json').read_text());info['version']='0.1.9';atomic_json(root/'installation.json',info)
+        info=json.loads((root/'installation.json').read_text());installed=info['version'] if len(sys.argv)>3 else '0.1.9';info['version']=installed;atomic_json(root/'installation.json',info)
         store=Store();card=fresh('Prueba de conservación');store.apply([card]);store.setting('model','modelo-de-prueba');store.setting('draft','borrador conservado');db=store.path;store.db.close()
         before=digest(db)
         # Copia independiente del helper para simular la llamada de la aplicación.
         import app.updater as updater
         sys._alm_helper=False
-        jobdir=prepare_job(package,root,'0.1.9',db.parent,expected_to=__version__)
+        jobdir=prepare_job(package,root,installed,db.parent,expected_to=__version__)
         (jobdir/'go').write_text('go')
         end=time.monotonic()+110
         try:
