@@ -118,11 +118,11 @@ class App(tk.Tk):
             if self.store.setting('update_result_seen')==key:return
             self.store.setting('update_result_seen',key)
             if result.get('success'):self.status.configure(text='Actualización instalada · Versión '+str(result.get('to')))
-            else:messagebox.showwarning('Actualización revertida',result.get('error','No se pudo actualizar. Se conservó la versión anterior.'))
+            else:messagebox.showwarning('Actualización revertida',result.get('error','No se pudo actualizar. Se conservó la versión anterior.'),parent=self)
         except (OSError,ValueError):pass
     def process_selected(self):
         target=self.selected()
-        if not target:messagebox.showinfo('Elegí una tarjeta','Seleccioná la tarjeta que querés actualizar.');return
+        if not target:messagebox.showinfo('Elegí una tarjeta','Seleccioná la tarjeta que querés actualizar.',parent=self);return
         self.process(target)
     def save_draft(self,event=None):
         if self.input.edit_modified():
@@ -137,7 +137,7 @@ class App(tk.Tk):
         super().destroy()
     def close(self):
         if self.busy or self.recording:
-            messagebox.showinfo('Operación en curso','Esperá a que termine el procesamiento o detené la grabación.'); return
+            messagebox.showinfo('Operación en curso','Esperá a que termine el procesamiento o detené la grabación.',parent=self); return
         for p in self.tempfiles: Path(p).unlink(missing_ok=True)
         self.store.db.close(); self.destroy()
     def change_view(self,v): self.view.set(v); self.refresh()
@@ -186,15 +186,15 @@ class App(tk.Tk):
         self._poll_job=self.after(100,self.poll)
     def save(self,items):
         try:self.store.apply(items)
-        except Exception as e:messagebox.showerror('Guardar',str(e))
+        except Exception as e:messagebox.showerror('Guardar',str(e),parent=self)
         self.refresh()
     def undo(self):self.store.undo(); self.refresh()
     def open_selected(self):
         id=self.selected()
         if id:self.editor(self.store.get(id))
     def editor(self,data):
-        window=tk.Toplevel(self);window.title('Detalle de tarjeta');window.configure(bg=BG)
-        window.geometry(f"{min(760,self.winfo_screenwidth()-100)}x{min(780,self.winfo_screenheight()-110)}");window.minsize(480,400)
+        window=tk.Toplevel(self);window.withdraw();window.transient(self);window.title('Detalle de tarjeta');window.configure(bg=BG)
+        window.minsize(480,400)
         header=ttk.Frame(window,padding=(24,20));header.pack(fill='x')
         ttk.Label(header,text='Detalle de tarjeta',font=('Segoe UI',20,'bold')).pack(anchor='w')
         ttk.Label(header,text='Organizá el trabajo y lo que falta hacer.',foreground=MUTED).pack(anchor='w',pady=(5,0))
@@ -225,6 +225,7 @@ class App(tk.Tk):
             except Exception as e:messagebox.showerror('Revisar tarjeta',str(e),parent=window)
         ttk.Button(footer,text='Guardar cambios',style='Accent.TButton',command=commit).pack(side='right')
         ttk.Button(footer,text='Cancelar',command=window.destroy).pack(side='right',padx=8)
+        place_window(window,760,780,parent=self)
     def process(self,target=None):
         if self.busy:return
         text=self.input.get('1.0','end').strip(); author=self.author.get(); items=self.store.items(); model=self.store.setting('model'); paths=list(self.files); keep=self.keep.get()
@@ -243,14 +244,14 @@ class App(tk.Tk):
             if not isinstance(result.get('creates',[]),list) or not isinstance(result.get('updates',[]),list):raise ValueError('Respuesta de IA inválida.')
             if result.get('questions'):
                 self.show_capture()
-                messagebox.showinfo('Necesito aclarar','\n'.join(result['questions'])+'\n\nAgregá tu respuesta a la entrada y volvé a interpretar.');return
+                messagebox.showinfo('Necesito aclarar','\n'.join(result['questions'])+'\n\nAgregá tu respuesta a la entrada y volvé a interpretar.',parent=self);return
             changes=[]
             for patch in result.get('creates',[]):
                 d=fresh(author=author); allowed={'title','summary','kind','owners','priority','planned','deadline','pending','questions'}; d.update({k:v for k,v in patch.items() if k in allowed})
                 similar=next((x for x in items if x['title'].casefold()==d['title'].casefold()),None)
                 if similar:
                     self.show_capture()
-                    messagebox.showinfo('Posible duplicado',f"Ya existe: {similar['title']}. Seleccionala y usá Actualizar seleccionada para unir el avance.");return
+                    messagebox.showinfo('Posible duplicado',f"Ya existe: {similar['title']}. Seleccionala y usá Actualizar seleccionada para unir el avance.",parent=self);return
                 changes.append(d)
             for update in result.get('updates',[]):
                 id=update.get('id'); old=next((x for x in items if x['id']==id),None)
@@ -277,7 +278,7 @@ class App(tk.Tk):
             img=ImageGrab.grabclipboard()
             if not hasattr(img,'save'):raise ValueError('El portapapeles no contiene una imagen.')
             path=Path(tempfile.gettempdir())/(str(uuid.uuid4())+'.png');img.save(path);self.files.append(str(path));self.tempfiles.append(str(path));self.status.configure(text='Captura agregada')
-        except Exception as e:messagebox.showerror('Pegar captura',str(e))
+        except Exception as e:messagebox.showerror('Pegar captura',str(e),parent=self)
     def record(self):
         if self.recording or self.busy:return
         try:
@@ -285,7 +286,7 @@ class App(tk.Tk):
             self.chunks=[]
             self.recording=sd.RawInputStream(samplerate=16000,channels=1,dtype='int16',callback=lambda data,frames,time,status:self.chunks.append(bytes(data)))
             self.recording.start();self.status.configure(text='Grabando…');self.capture_status.configure(text='Grabando… elegí transcribir o ejecutar al terminar.');self.record_timer=self.after(3600000,lambda:self.stop(False))
-        except Exception as e:self.recording=None;messagebox.showerror('Micrófono',str(e))
+        except Exception as e:self.recording=None;messagebox.showerror('Micrófono',str(e),parent=self)
     def stop(self,execute):
         if not self.recording:return
         self.after_cancel(self.record_timer);self.recording.stop();self.recording.close();self.recording=None
@@ -305,26 +306,27 @@ class App(tk.Tk):
         if id:
             d=self.store.get(id);d['deleted']=not d.get('deleted');self.save([d])
     def meeting(self):
-        if any(d.get('recurrence')=='tuesday' and d['status']!='Terminado' for d in self.store.items()):messagebox.showinfo('Reunión','Ya hay una reunión pendiente.');return
+        if any(d.get('recurrence')=='tuesday' and d['status']!='Terminado' for d in self.store.items()):messagebox.showinfo('Reunión','Ya hay una reunión pendiente.',parent=self);return
         date=today()+dt.timedelta(days=(1-today().weekday())%7); d=fresh('Reunión semanal');d.update(recurrence='tuesday',owners=[PEOPLE[0]],planned=date.isoformat(),deadline=date.isoformat());self.save([d])
     def notify(self):
         id=self.selected()
         if not id:return
-        d=self.store.get(id);w=tk.Toplevel(self);w.title('Notificar · editar y copiar');w.geometry('650x380')
+        d=self.store.get(id);w=tk.Toplevel(self);w.withdraw();w.transient(self);w.title('Notificar · editar y copiar')
         box=tk.Text(w,wrap='word',bg=CARD,fg=FG,insertbackground=FG,font=('Segoe UI',12));box.pack(fill='both',expand=True)
         box.insert('1.0',f"{', '.join(d['owners']) or 'Equipo'}, ¿cómo vienen con esto?\n\n{d['title']}\n{d['summary']}\n\nPendiente: {', '.join(d.get('pending',[]))}\nFecha límite: {d['deadline']}")
         def copy_text():
             text=box.get('1.0','end').strip();self.clipboard_clear();self.clipboard_append(text)
             samples=self.store.setting('writing_samples') or [];self.store.setting('writing_samples',(samples+[text])[-20:]);w.destroy()
         ttk.Button(w,text='Copiar mensaje',command=copy_text).pack(pady=10)
+        place_window(w,650,380,parent=self)
     def history(self):
-        w=tk.Toplevel(self);w.title('Historial');w.geometry('700x450');box=tk.Text(w,bg=CARD,fg=FG,wrap='word');box.pack(fill='both',expand=True)
+        w=tk.Toplevel(self);w.withdraw();w.transient(self);w.title('Historial');box=tk.Text(w,bg=CARD,fg=FG,wrap='word');box.pack(fill='both',expand=True)
         for stamp,after,undone in self.store.db.execute('SELECT stamp,after,undone FROM history ORDER BY seq DESC LIMIT 100'):
             box.insert('end',stamp+(' · Deshecho' if undone else '')+'\n'+'\n'.join(d['title'] for d in json.loads(after))+'\n\n')
-        box.configure(state='disabled')
+        box.configure(state='disabled');place_window(w,700,450,parent=self)
     def settings(self):
-        if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar los ajustes.');return
-        window=tk.Toplevel(self);window.title('Ajustes');window.geometry('650x600');window.minsize(480,360);window.configure(bg=BG)
+        if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar los ajustes.',parent=self);return
+        window=tk.Toplevel(self);window.withdraw();window.transient(self);window.title('Ajustes');window.minsize(480,360);window.configure(bg=BG)
         area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body
         ttk.Label(w,text='Personas del equipo · una por línea').pack(pady=8)
         ttk.Label(w,text='Reemplazá cada nombre en su misma línea. Las tareas y el historial conservarán a la persona correspondiente.',wraplength=570,foreground=MUTED).pack(padx=12,pady=(0,8))
@@ -369,9 +371,10 @@ class App(tk.Tk):
         backup_label.pack(padx=12);show_backup_folder()
         ttk.Label(w,text='Se conservan las últimas 30 copias de la base de datos. Usá una carpeta exclusiva. Los archivos multimedia adjuntos no se incluyen.',wraplength=570,foreground=MUTED).pack(padx=12,pady=8)
         ttk.Label(w,text=f'Datos locales: {self.store.path}',wraplength=600).pack()
-    def finance(self):messagebox.showinfo('Finanzas · Próximamente','Módulo previsto: gastos, ganancias y repartos. Se definirá e implementará más adelante.')
+        place_window(window,650,600,parent=self)
+    def finance(self):messagebox.showinfo('Finanzas · Próximamente','Módulo previsto: gastos, ganancias y repartos. Se definirá e implementará más adelante.',parent=self)
     def updates(self):
-        if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de actualizar.');return
+        if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de actualizar.',parent=self);return
         import sys
         from .update_dialog import UpdateDialog
         root=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]

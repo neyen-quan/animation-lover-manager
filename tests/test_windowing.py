@@ -1,5 +1,5 @@
 import unittest
-from app.windowing import choose_area,centered_rect
+from app.windowing import choose_area,centered_rect,absolute_geometry
 
 class MonitorTests(unittest.TestCase):
  def test_middle_monitor_with_negative_and_reordered_origins(self):
@@ -11,3 +11,5 @@ class MonitorTests(unittest.TestCase):
   self.assertEqual(choose_area([a,b]),b);self.assertEqual(choose_area([a,b],(-900,500)),a)
   self.assertEqual(choose_area([b]),b)
   self.assertEqual(centered_rect(a,2500,2000),(1920,1040,-1920,0))
+ def test_absolute_offsets_support_monitors_left_and_above_primary(self):
+  self.assertEqual(absolute_geometry(840,540,-1500,-20),'840x540+-1500+-20')

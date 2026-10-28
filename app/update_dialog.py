@@ -9,9 +9,9 @@ from . import updater as u
 
 class UpdateDialog(tk.Toplevel):
     def __init__(self,parent,store,installed,root,app=None,transition=False):
-        super().__init__(parent)
+        super().__init__(parent);self.withdraw()
         from .theme import apply_theme
-        apply_theme(self);self.title('Actualizar programa');self.geometry('680x440');self.minsize(540,360)
+        apply_theme(self);self.title('Actualizar programa');self.minsize(540,360)
         self.store=store;self.installed=installed;self.root_path=Path(root);self.app=app;self.transition=transition;self.info=None;self.q=queue.Queue();self.working=False
         self.channel=tk.StringVar(value=(f'https://github.com/neyen-quan/animation-lover-manager/releases/download/v{__version__}/latest.json' if transition else store.setting('update_channel') or u.CHANNEL))
         self.progress_text=tk.StringVar(value='Buscá una versión nueva en el canal de GitHub.')
@@ -33,7 +33,13 @@ class UpdateDialog(tk.Toplevel):
         self.local_btn=ttk.Button(body,text='Instalar ZIP local…',command=self.local);self.local_btn.pack(anchor='w')
         self.protocol('WM_DELETE_WINDOW',self.close)
         if parent.winfo_viewable():self.transient(parent)
-        self.grab_set();self.after(100,self.poll)
+        from .windowing import place_window
+        place_window(self,680,440,parent=parent)
+        self.grab_set();self._poll_job=self.after(100,self.poll)
+    def destroy(self):
+        if getattr(self,'_poll_job',None):
+            self.after_cancel(self._poll_job);self._poll_job=None
+        super().destroy()
     def close(self):
         if not self.working:self.destroy()
     def task(self,work,done):
@@ -56,7 +62,7 @@ class UpdateDialog(tk.Toplevel):
                     except Exception as e:messagebox.showerror('Actualización',str(e),parent=self)
         except queue.Empty:pass
         try:
-            if self.winfo_exists():self.after(100,self.poll)
+            if self.winfo_exists():self._poll_job=self.after(100,self.poll)
         except tk.TclError:pass
     def check(self):
         channel=self.channel.get().strip()

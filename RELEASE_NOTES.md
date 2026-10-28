@@ -1,9 +1,9 @@
-Ventana centrada y captura de ideas independiente.
+Ventanas emergentes centradas en el monitor del gestor.
 
-- Al abrir, se centra la ventana en el monitor del medio si hay tres o más pantallas, respetando el área útil de Windows y manteniendo el tamaño habitual.
-- La pantalla principal ya no tiene desplazamiento ni barras de scroll. El tablero usa páginas para mantener todas las tareas accesibles.
-- Soltar idea abre una ventana sobre el gestor para escribir, pegar capturas, adjuntar archivos y grabar voz.
-- Al enviar, la ventana se cierra mientras se procesa. Si hay dudas o errores, vuelve a abrirse conservando la entrada. Las tarjetas creadas o actualizadas aparecen en Recientes.
-- Cerrar la ventana de captura conserva el borrador. Parar y transcribir deja el texto disponible para revisar antes de enviarlo.
+- Se corrige la posición inicial de Soltar idea y su reapertura: ya no debe volver a la esquina superior izquierda.
+- Actualizar programa, Ajustes, edición de tarjetas, Historial y Preparar mensaje usan el mismo centrado.
+- La posición se mantiene en el monitor donde está el gestor y considera el marco de Windows y la barra de tareas, incluso con monitores de coordenadas negativas.
+- Los avisos tienen una ventana propietaria explícita para aparecer junto al programa.
+- Nuevas pruebas verifican la posición nativa de cada ventana después de abrirla y reabrirla.
 
 Actualizar programa → Buscar actualizaciones → Descargar e instalar.
