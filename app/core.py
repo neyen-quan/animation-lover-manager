@@ -58,6 +58,36 @@ class Store:
     def get(self,id):
         r=self.db.execute('SELECT data FROM items WHERE id=?',(id,)).fetchone()
         return json.loads(r[0]) if r else None
+    def rename_people(self,names):
+        names=[str(n).strip() for n in names]
+        if not names or any(not n or ',' in n or n.casefold()=='todos' for n in names):
+            raise ValueError('Ingresá un nombre por línea, sin comas ni el nombre reservado Todos.')
+        if len({n.casefold() for n in names})!=len(names):
+            raise ValueError('Ingresá nombres distintos para cada persona.')
+        old=self.setting('people') or list(PEOPLE)
+        used=self.db.execute('SELECT EXISTS(SELECT 1 FROM items) OR EXISTS(SELECT 1 FROM history)').fetchone()[0]
+        if used and len(names)!=len(old):
+            raise ValueError('Para conservar las asignaciones, mantené la cantidad de personas y reemplazá cada nombre en su misma línea.')
+        mapping=dict(zip(old,names))
+        # Keep an independent local recovery copy even if Drive is unavailable.
+        self.backup(folder=self.path.parent/'backups')
+        def remap(data):
+            if data is None:return None
+            data=copy.deepcopy(data)
+            if 'author' in data:data['author']=mapping.get(data['author'],data['author'])
+            if 'owners' in data:data['owners']=[mapping.get(p,p) for p in data['owners']]
+            return data
+        with self.db:
+            for id,value in self.db.execute('SELECT id,data FROM items').fetchall():
+                self.db.execute('UPDATE items SET data=? WHERE id=?',(json.dumps(remap(json.loads(value)),ensure_ascii=False),id))
+            for seq,before,after in self.db.execute('SELECT seq,before,after FROM history').fetchall():
+                before={id:remap(d) for id,d in json.loads(before).items()}
+                after=[remap(d) for d in json.loads(after)]
+                self.db.execute('UPDATE history SET before=?,after=? WHERE seq=?',(json.dumps(before,ensure_ascii=False),json.dumps(after,ensure_ascii=False),seq))
+            aliases={key:mapping.get(value,value) for key,value in (self.setting('aliases') or {}).items()}
+            for key,value in [('people',names),('aliases',aliases)]:
+                self.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',(key,json.dumps(value,ensure_ascii=False)))
+        return mapping
     def apply(self,items):
         items=[validate(d) for d in items]
         ids=[d['id'] for d in items]
@@ -85,8 +115,8 @@ class Store:
                 else: self.db.execute('INSERT OR REPLACE INTO items VALUES (?,?)',(id,json.dumps(d)))
             self.db.execute('UPDATE history SET undone=1 WHERE seq=?',(r[0],))
         self.backup()
-    def backup(self):
-        folder=Path(self.setting('backup_folder') or self.path.parent/'backups'); folder.mkdir(parents=True,exist_ok=True)
+    def backup(self,folder=None):
+        folder=Path(folder or self.setting('backup_folder') or self.path.parent/'backups'); folder.mkdir(parents=True,exist_ok=True)
         path=folder/(dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.sqlite3')
         with closing(sqlite3.connect(path)) as target: self.db.backup(target)
         backups=sorted(folder.glob('*.sqlite3'))

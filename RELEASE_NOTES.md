@@ -1,9 +1,9 @@
-Corrección de la transcripción de notas de voz.
+Configuración del equipo y de los respaldos.
 
-- Se fija PyAV 18.1.0, compatible con faster-whisper 1.2.1, para resolver el error de `metadata_errors` al leer el audio.
-- Nuevas pruebas con audio WAV de micrófono y Ogg/Opus como las notas de WhatsApp.
-- El ejecutable de Windows también verifica el decodificador real antes de publicarse, sin descargar modelos ni usar servicios pagos.
+- Permite reemplazar los nombres del equipo con tareas existentes, conservando autores, responsables, papelera, historial y Deshacer.
+- Muestra una confirmación con la correspondencia por línea y guarda una copia local antes del cambio.
+- Los selectores se actualizan al guardar, sin reiniciar el programa.
+- Los ajustes muestran la carpeta de respaldo y confirman la creación de una copia. Si no se puede escribir, se conserva la carpeta anterior.
+- Se aclara que los respaldos actuales contienen la base de datos y no los archivos multimedia adjuntos.
 
 Actualizar programa → Buscar actualizaciones → Descargar e instalar.
-
-Se mantienen los datos, la configuración y el diseño del tablero.

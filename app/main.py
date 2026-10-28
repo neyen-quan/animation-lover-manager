@@ -59,7 +59,7 @@ class App(tk.Tk):
         filters.add(ttk.Button(filters,text='+ Nueva tarjeta',style='Accent.TButton',command=lambda:self.editor(fresh())))
         filters.add(ttk.Label(filters,text='Buscar'))
         filters.add(ttk.Entry(filters,textvariable=self.search,width=18))
-        box=filters.add(ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12));box.bind('<<ComboboxSelected>>',lambda e:self.refresh())
+        box=filters.add(ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12));box.bind('<<ComboboxSelected>>',lambda e:self.refresh());self.people_filter=box
         filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
         self.board=TaskBoard(content,self.open_selected,lambda:self.editor(fresh()),self.board_action);self.board.grid(row=5,column=0,sticky='nsew')
         self.tree=self.board
@@ -75,7 +75,7 @@ class App(tk.Tk):
         self.input.grid(row=2,column=0,sticky='ew')
         toolbar=WrapBar(capture);toolbar.grid(row=3,column=0,sticky='ew',pady=7)
         toolbar.add(ttk.Label(toolbar,text='Idea de'))
-        toolbar.add(ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=12))
+        self.author_box=toolbar.add(ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=12))
         toolbar.add(ttk.Checkbutton(toolbar,text='Conservar adjuntos',variable=self.keep))
         for title,cmd in [('Adjuntar',self.attach),('Pegar imagen',self.paste_image),('Grabar',self.record),('Parar y transcribir',lambda:self.stop(False)),('Parar y ejecutar',lambda:self.stop(True))]:toolbar.add(ttk.Button(toolbar,text=title,command=cmd))
         submit=WrapBar(capture);submit.grid(row=4,column=0,sticky='ew')
@@ -305,23 +305,51 @@ class App(tk.Tk):
             box.insert('end',stamp+(' · Deshecho' if undone else '')+'\n'+'\n'.join(d['title'] for d in json.loads(after))+'\n\n')
         box.configure(state='disabled')
     def settings(self):
+        if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar los ajustes.');return
         window=tk.Toplevel(self);window.title('Ajustes');window.geometry('650x600');window.minsize(480,360);window.configure(bg=BG)
         area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body
-        ttk.Label(w,text='Personas del equipo (una por línea). Guardar y reiniciar.').pack(pady=8)
+        ttk.Label(w,text='Personas del equipo · una por línea').pack(pady=8)
+        ttk.Label(w,text='Reemplazá cada nombre en su misma línea. Las tareas y el historial conservarán a la persona correspondiente.',wraplength=570,foreground=MUTED).pack(padx=12,pady=(0,8))
         roster=tk.Text(w,height=5,bg=CARD,fg=FG,insertbackground=FG,font=('Segoe UI',11),padx=10,pady=8);roster.insert('1.0','\n'.join(PEOPLE));roster.pack(fill='x',padx=12)
         def save_people():
             names=[n.strip() for n in roster.get('1.0','end').splitlines() if n.strip()]
-            if not names or len(names)!=len(set(names)):messagebox.showerror('Equipo','Ingresá nombres distintos.');return
-            if self.store.items():messagebox.showinfo('Equipo','Para renombrar personas con tareas existentes se necesita una migración.');return
-            self.store.setting('people',names);messagebox.showinfo('Equipo','Guardado. Cerrá y volvé a abrir la aplicación.')
+            if names==PEOPLE:return
+            if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar el equipo.',parent=window);return
+            if any(isinstance(child,tk.Toplevel) and child!=window for child in self.winfo_children()):
+                messagebox.showinfo('Equipo','Cerrá las otras ventanas del programa antes de cambiar los nombres.',parent=window);return
+            preview='\n'.join(f'{old} → {new}' for old,new in zip(PEOPLE,names))
+            if not messagebox.askyesno('Confirmar equipo','Se actualizarán los nombres en las tareas y el historial:\n\n'+preview+'\n\n¿Guardar estos cambios?',parent=window):return
+            try:
+                mapping=self.store.rename_people(names)
+            except Exception as error:messagebox.showerror('Equipo',str(error),parent=window);return
+            PEOPLE[:]=names;ALIASES.clear();ALIASES.update(self.store.setting('aliases') or {})
+            self.author.set(mapping.get(self.author.get(),PEOPLE[0]));self.filter_person.set(mapping.get(self.filter_person.get(),'Todos'))
+            self.author_box.configure(values=PEOPLE);self.people_filter.configure(values=['Todos']+PEOPLE);self.refresh()
+            try:self.store.backup()
+            except Exception as error:
+                messagebox.showwarning('Equipo guardado','Los nombres ya se actualizaron y hay una copia local previa. No se pudo crear el respaldo en la carpeta elegida:\n'+str(error),parent=window);return
+            messagebox.showinfo('Equipo','Nombres actualizados. Se conservaron las tareas y el historial. No hace falta reiniciar.',parent=window)
         ttk.Button(w,text='Guardar equipo local',command=save_people).pack()
         ttk.Label(w,text='Modelo local instalado en Ollama').pack(pady=12);var=tk.StringVar(value=self.store.setting('model') or '');ttk.Entry(w,textvariable=var,width=45).pack()
         ttk.Label(w,text='La IA requiere Ollama en esta PC. No se conectan APIs pagas.\nLa transcripción descarga un modelo local la primera vez.',wraplength=590).pack(pady=12)
         ttk.Button(w,text='Guardar modelo',command=lambda:(self.store.setting('model',var.get().strip()),window.destroy())).pack()
+        backup_label=ttk.Label(w,text='',wraplength=570,foreground=MUTED)
+        def show_backup_folder():backup_label.configure(text='Carpeta actual: '+str(self.store.setting('backup_folder') or self.store.path.parent/'backups'))
         def backup_folder():
-            path=filedialog.askdirectory()
-            if path:self.store.setting('backup_folder',path);self.store.backup()
+            path=filedialog.askdirectory(parent=window,title='Elegí una carpeta exclusiva para los respaldos de Animation Lover')
+            if not path:return
+            previous=self.store.setting('backup_folder')
+            try:
+                self.store.setting('backup_folder',path);created=self.store.backup()
+            except Exception as error:
+                with self.store.db:
+                    if previous is None:self.store.db.execute("DELETE FROM settings WHERE key='backup_folder'")
+                    else:self.store.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',('backup_folder',json.dumps(previous)))
+                messagebox.showerror('Respaldo','No se pudo crear la copia. Se conserva la carpeta anterior.\n\n'+str(error),parent=window);return
+            show_backup_folder();messagebox.showinfo('Respaldo creado','Se guardó una copia en:\n'+str(created)+'\n\nSi elegiste una carpeta sincronizada, Google Drive se encarga de subirla cuando esté activo y tenga conexión.',parent=window)
         ttk.Button(w,text='Carpeta de respaldo (puede ser Google Drive sincronizado)',command=backup_folder).pack(pady=12)
+        backup_label.pack(padx=12);show_backup_folder()
+        ttk.Label(w,text='Se conservan las últimas 30 copias de la base de datos. Usá una carpeta exclusiva. Los archivos multimedia adjuntos no se incluyen.',wraplength=570,foreground=MUTED).pack(padx=12,pady=8)
         ttk.Label(w,text=f'Datos locales: {self.store.path}',wraplength=600).pack()
     def finance(self):messagebox.showinfo('Finanzas · Próximamente','Módulo previsto: gastos, ganancias y repartos. Se definirá e implementará más adelante.')
     def updates(self):
