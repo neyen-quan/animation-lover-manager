@@ -36,7 +36,6 @@ class NavItem(tk.Canvas):
         while label and self.label_font.measure(label)>w-48:label=label[:-1]
         if label!=self.label:label=label[:-1]+'…'
         self.create_text(40,y,text=label,anchor='w',font=self.label_font,fill='#f2f3fc' if self.active else '#cdd6eb')
-        if self.focus_get()==self:self.create_rectangle(6,5,w-6,h-5,outline='#b6c0e4',dash=(2,3))
     def icon(self,x,y,c):
         def line(*v,**kw):self.create_line(*v,fill=c,width=1.5,capstyle='round',joinstyle='round',**kw)
         def rect(a,b,d,e):self.create_rectangle(a,b,d,e,outline=c,width=1.3)
