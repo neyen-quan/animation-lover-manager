@@ -1,4 +1,5 @@
 """Persistencia local. Ningún dato de uso se guarda en el repositorio."""
+from contextlib import closing
 import calendar, copy, datetime as dt, json, os, sqlite3, uuid
 from pathlib import Path
 PEOPLE = ['Persona 1','Persona 2','Persona 3','Persona 4','Persona 5']
@@ -87,7 +88,7 @@ class Store:
     def backup(self):
         folder=Path(self.setting('backup_folder') or self.path.parent/'backups'); folder.mkdir(parents=True,exist_ok=True)
         path=folder/(dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.sqlite3')
-        with sqlite3.connect(path) as target: self.db.backup(target)
+        with closing(sqlite3.connect(path)) as target: self.db.backup(target)
         backups=sorted(folder.glob('*.sqlite3'))
         for p in backups[:-30]: p.unlink()
         return path
