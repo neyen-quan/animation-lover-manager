@@ -3,6 +3,8 @@ from pathlib import Path
 if '--smoke-test' in sys.argv:
     with tempfile.TemporaryDirectory() as root:
         os.environ['LOCALAPPDATA']=root
+        from app.audio_check import check_audio_decoder
+        check_audio_decoder()
         from app.main import App
         app=App();app.update();app.change_view('Todas');app.update()
         assert app.winfo_width()>100
