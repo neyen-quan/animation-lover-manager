@@ -14,10 +14,15 @@ class ScrollArea(ttk.Frame):
         self.body.bind('<Configure>',self.region)
         self.canvas.bind('<Configure>',self.resize)
         self.canvas.bind_all('<MouseWheel>',self.wheel,add='+')
-    def resize(self,event):self.canvas.itemconfigure(self.window,width=event.width);self.region()
+    def resize(self,event):
+        if int(float(self.canvas.itemcget(self.window,'width')))!=event.width:self.canvas.itemconfigure(self.window,width=event.width)
+        self.region()
     def region(self,event=None):
-        self.canvas.itemconfigure(self.window,height=max(self.body.winfo_reqheight(),self.canvas.winfo_height()))
-        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+        height=max(self.body.winfo_reqheight(),self.canvas.winfo_height())
+        if int(float(self.canvas.itemcget(self.window,'height')))!=height:self.canvas.itemconfigure(self.window,height=height)
+        bbox=self.canvas.bbox('all')
+        current=tuple(map(int,self.canvas.cget('scrollregion').split())) if self.canvas.cget('scrollregion') else ()
+        if bbox and current!=bbox:self.canvas.configure(scrollregion=bbox)
     def wheel(self,event):
         w=event.widget
         while w:
@@ -35,4 +40,6 @@ class WrapBar(ttk.Frame):
         for w in self.children_list:
             needed=w.winfo_reqwidth()+6
             if x and x+needed>width:row+=1;col=0;x=0
-            w.grid(row=row,column=col,sticky='w',padx=(0,6),pady=3);col+=1;x+=needed
+            info=w.grid_info()
+            if int(info.get('row',-1))!=row or int(info.get('column',-1))!=col:w.grid(row=row,column=col,sticky='w',padx=(0,6),pady=3)
+            col+=1;x+=needed
