@@ -1,0 +1,20 @@
+from tkinter import ttk
+BG='#10131d'; CARD='#1b2131'; FG='#e9ecf5'; MUTED='#a6b0c7'; ACCENT='#9d8cff'
+def apply_theme(root):
+    root.configure(bg=BG)
+    s=ttk.Style(root);s.theme_use('clam')
+    s.configure('.',background=BG,foreground=FG,font=('Segoe UI',10))
+    s.configure('TFrame',background=BG)
+    s.configure('TButton',padding=(12,8),background=CARD,foreground=FG,borderwidth=0,relief='flat',focuscolor=CARD)
+    s.map('TButton',background=[('active','#303b55'),('disabled','#181d2a')],foreground=[('disabled','#788398')])
+    s.configure('Accent.TButton',background='#7662dc',foreground='white',padding=(16,10))
+    s.map('Accent.TButton',background=[('active','#8d79ed'),('disabled','#37314d')])
+    s.configure('Nav.TButton',padding=(12,9),anchor='w')
+    s.configure('TEntry',fieldbackground=CARD,foreground=FG,insertcolor=FG,borderwidth=0,padding=7)
+    s.configure('TCombobox',fieldbackground=CARD,background=CARD,foreground=FG,arrowcolor=FG,padding=5,borderwidth=0)
+    s.map('TCombobox',fieldbackground=[('readonly',CARD)],foreground=[('readonly',FG)],selectbackground=[('readonly',CARD)],selectforeground=[('readonly',FG)])
+    s.configure('Treeview',background=CARD,fieldbackground=CARD,foreground=FG,rowheight=36,borderwidth=0,relief='flat')
+    s.configure('Treeview.Heading',background='#252d40',foreground=MUTED,padding=9,relief='flat',borderwidth=0)
+    s.map('Treeview',background=[('selected','#3e365e')])
+    s.configure('TCheckbutton',background=BG,foreground=MUTED)
+    root.option_add('*TCombobox*Listbox.background',CARD);root.option_add('*TCombobox*Listbox.foreground',FG)

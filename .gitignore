@@ -9,3 +9,7 @@ attachments/
 dist/
 build/
 *.spec
+
+release/
+previous/
+interfaz-windows.png

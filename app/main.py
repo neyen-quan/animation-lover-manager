@@ -5,54 +5,77 @@ from tkinter import ttk, messagebox, filedialog
 from .core import Store, PEOPLE, KINDS, STATES, ALIASES, fresh, today, urgency
 from .ai import interpret, transcribe
 
-BG='#10131d'; CARD='#1b2131'; FG='#e9ecf5'; MUTED='#a6b0c7'; ACCENT='#9d8cff'
+from . import __version__
+from .theme import BG, CARD, FG, MUTED, ACCENT, apply_theme
+from .widgets import ScrollArea, WrapBar
+
 class App(tk.Tk):
     def __init__(self):
-        super().__init__(); self.title('Animation Lover · Gestión'); self.geometry('1280x850'); self.configure(bg=BG)
-        self.store=Store(); PEOPLE[:]=self.store.setting('people') or PEOPLE; ALIASES.update(self.store.setting('aliases') or {}); self.jobs=queue.Queue(); self.files=[]; self.tempfiles=[]; self.recording=None; self.busy=False
+        super().__init__(); self.title('Animation Lover · Gestión · '+__version__)
+        self.geometry(f"{min(1180,self.winfo_screenwidth()-70)}x{min(820,self.winfo_screenheight()-90)}");self.minsize(740,480)
+        apply_theme(self)
+        import sys
+        icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets/icon.png'
+        if icon.exists():self._icon=tk.PhotoImage(file=icon);self.iconphoto(True,self._icon)
+        self.store=Store(); PEOPLE[:]=self.store.setting('people') or PEOPLE; ALIASES.update(self.store.setting('aliases') or {})
+        self.jobs=queue.Queue();self.files=[];self.tempfiles=[];self.recording=None;self.busy=False
         self.protocol('WM_DELETE_WINDOW',self.close)
-        style=ttk.Style(self); style.theme_use('clam')
-        style.configure('.',background=BG,foreground=FG,font=('Segoe UI',11))
-        style.configure('TButton',padding=9,background=CARD,foreground=FG)
-        style.map('TButton',background=[('active','#353d59')])
-        style.configure('Treeview',background=CARD,fieldbackground=CARD,foreground=FG,rowheight=38,borderwidth=0)
-        style.configure('Treeview.Heading',background=BG,foreground=MUTED,padding=9)
-        style.configure('TCombobox',fieldbackground=CARD,foreground=FG)
-        self.view=tk.StringVar(value='Hoy'); self.author=tk.StringVar(value=PEOPLE[0]); self.filter_person=tk.StringVar(value='Todos'); self.keep=tk.BooleanVar(); self.search=tk.StringVar()
-        header=ttk.Frame(self,padding=20); header.pack(fill='x')
-        ttk.Label(header,text='ANIMATION LOVER',font=('Segoe UI',20,'bold')).pack(side='left')
-        for title,cmd in [('Ajustes',self.settings),('Finanzas',self.finance),('Versiones',self.updates),('Deshacer',self.undo)]: ttk.Button(header,text=title,command=cmd).pack(side='right',padx=4)
-        self.summary=ttk.Label(self,font=('Segoe UI',13)); self.summary.pack(anchor='w',padx=24,pady=8)
-        bar=ttk.Frame(self,padding=12); bar.pack(fill='x')
+        self.view=tk.StringVar(value='Hoy');self.author=tk.StringVar(value=PEOPLE[0]);self.filter_person=tk.StringVar(value='Todos');self.keep=tk.BooleanVar();self.search=tk.StringVar()
+        self.columnconfigure(0,weight=1);self.rowconfigure(1,weight=1)
+        header=ttk.Frame(self,padding=(18,12));header.grid(row=0,column=0,sticky='ew');header.columnconfigure(0,weight=1)
+        ttk.Label(header,text='Animation Lover',font=('Segoe UI',19,'bold')).grid(row=0,column=0,sticky='w')
+        self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=1,padx=8)
+        ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=2)
+        self.area=ScrollArea(self);self.area.grid(row=1,column=0,sticky='nsew')
+        layout=self.area.body;layout.columnconfigure(1,weight=1);layout.rowconfigure(0,weight=1)
+        nav=ttk.Frame(layout,padding=(12,10));nav.grid(row=0,column=0,sticky='ns')
+        ttk.Label(nav,text='MI ESPACIO',foreground=MUTED,font=('Segoe UI',9,'bold')).pack(anchor='w',padx=10,pady=(0,8))
         for v in ['Hoy','Todas','Por persona','Recientes','Idea','Roadmap','Nota','Papelera']:
-            ttk.Button(bar,text=v,command=lambda x=v:self.change_view(x)).pack(side='left',padx=2)
-        filters=ttk.Frame(self,padding=12); filters.pack(fill='x')
-        ttk.Label(filters,text='Buscar').pack(side='left'); ttk.Entry(filters,textvariable=self.search,width=40).pack(side='left',padx=8)
-        box=ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12); box.pack(side='left'); box.bind('<<ComboboxSelected>>',lambda e:self.refresh())
+            ttk.Button(nav,text=v,style='Nav.TButton',width=13,command=lambda x=v:self.change_view(x)).pack(fill='x',pady=2)
+        ttk.Separator(nav).pack(fill='x',pady=12)
+        ttk.Button(nav,text='Finanzas · luego',style='Nav.TButton',command=self.finance).pack(fill='x')
+        ttk.Label(nav,text='Versión '+__version__,foreground=MUTED).pack(anchor='w',padx=10,pady=16)
+        content=ttk.Frame(layout,padding=(8,6,16,10));content.grid(row=0,column=1,sticky='nsew');content.columnconfigure(0,weight=1);content.rowconfigure(3,weight=1)
+        ttk.Label(content,textvariable=self.view,font=('Segoe UI',20,'bold')).grid(row=0,column=0,sticky='w',pady=(0,5))
+        self.summary=ttk.Label(content,foreground=MUTED,wraplength=600);self.summary.grid(row=1,column=0,sticky='ew',pady=(0,10))
+        filters=WrapBar(content);filters.grid(row=2,column=0,sticky='ew',pady=(0,8))
+        filters.add(ttk.Entry(filters,textvariable=self.search,width=24))
+        box=filters.add(ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12));box.bind('<<ComboboxSelected>>',lambda e:self.refresh())
+        filters.add(ttk.Button(filters,text='+ Nueva tarjeta',command=lambda:self.editor(fresh())))
+        filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
         self.search.trace_add('write',lambda *a:self.refresh())
-        ttk.Button(filters,text='Nueva tarjeta',command=lambda:self.editor(fresh())).pack(side='right')
-        ttk.Button(filters,text='Reunión del martes',command=self.meeting).pack(side='right',padx=5)
+        table=ttk.Frame(content);table.grid(row=3,column=0,sticky='nsew');table.columnconfigure(0,weight=1);table.rowconfigure(0,weight=1)
         cols=('title','kind','owners','status','deadline','priority')
-        self.tree=ttk.Treeview(self,columns=cols,show='headings',selectmode='browse')
-        for key,label,width in zip(cols,['Pendiente / idea','Tipo','Responsables actuales','Estado','Límite','Prioridad'],[400,95,170,120,110,100]):
-            self.tree.heading(key,text=label); self.tree.column(key,width=width,minwidth=70)
-        self.tree.tag_configure('late',foreground='#ff879a'); self.tree.tag_configure('warning',foreground='#f4c77d')
-        self.tree.pack(fill='both',expand=True,padx=20,pady=10); self.tree.bind('<Double-1>',lambda e:self.open_selected())
-        actions=ttk.Frame(self,padding=10); actions.pack(fill='x')
-        for title,cmd in [('Abrir / editar',self.open_selected),('Notificar',self.notify),('Eliminar / restaurar',self.delete),('Historial',self.history)]:ttk.Button(actions,text=title,command=cmd).pack(side='left',padx=5)
-        capture=ttk.Frame(self,padding=16); capture.pack(fill='x')
-        ttk.Label(capture,text='Soltá una idea o contá qué avanzó',font=('Segoe UI',14,'bold')).pack(anchor='w')
-        self.input=tk.Text(capture,height=5,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('Segoe UI',12),wrap='word'); self.input.pack(fill='x',pady=8)
-        toolbar=ttk.Frame(capture); toolbar.pack(fill='x')
-        ttk.Label(toolbar,text='Idea de').pack(side='left'); ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=10).pack(side='left',padx=5)
-        ttk.Checkbutton(toolbar,text='Conservar adjuntos',variable=self.keep).pack(side='left',padx=5)
-        for title,cmd in [('Adjuntar',self.attach),('Pegar imagen',self.paste_image),('Grabar',self.record),('Parar y transcribir',lambda:self.stop(False)),('Parar y ejecutar',lambda:self.stop(True))]:ttk.Button(toolbar,text=title,command=cmd).pack(side='left',padx=2)
-        ttk.Button(capture,text='Interpretar entrada',command=self.process).pack(side='right',pady=8)
-        ttk.Button(capture,text='Actualizar seleccionada',command=lambda:self.process(self.selected())).pack(side='right',pady=8,padx=8)
-        self.status=ttk.Label(capture,text='Listo. Doble clic en una tarjeta para expandirla.'); self.status.pack(side='left')
-        self.input.insert('1.0',self.store.setting('draft') or '')
-        self.input.bind('<<Modified>>',self.save_draft)
-        self.refresh(); self.after(100,self.poll)
+        self.tree=ttk.Treeview(table,columns=cols,show='headings',selectmode='browse',height=5)
+        for key,label,width in zip(cols,['Pendiente / idea','Tipo','Responsables','Estado','Límite','Prioridad'],[290,90,130,110,100,90]):
+            self.tree.heading(key,text=label);self.tree.column(key,width=width,minwidth=70,stretch=key=='title')
+        self.tree.tag_configure('late',foreground='#ff879a');self.tree.tag_configure('warning',foreground='#f4c77d')
+        self.tree.grid(row=0,column=0,sticky='nsew')
+        sy=ttk.Scrollbar(table,orient='vertical',command=self.tree.yview);sy.grid(row=0,column=1,sticky='ns')
+        sx=ttk.Scrollbar(table,orient='horizontal',command=self.tree.xview);sx.grid(row=1,column=0,sticky='ew');self.tree.configure(yscrollcommand=sy.set,xscrollcommand=sx.set)
+        self.tree.bind('<Double-1>',lambda e:self.open_selected())
+        actions=WrapBar(content);actions.grid(row=4,column=0,sticky='ew',pady=7)
+        for title,cmd in [('Abrir / editar',self.open_selected),('Notificar',self.notify),('Eliminar / restaurar',self.delete),('Historial',self.history),('Deshacer',self.undo)]:actions.add(ttk.Button(actions,text=title,command=cmd))
+        capture=ttk.Frame(content,padding=(0,10));capture.grid(row=5,column=0,sticky='ew');capture.columnconfigure(0,weight=1)
+        ttk.Label(capture,text='¿Qué tenés en mente?',font=('Segoe UI',14,'bold')).grid(row=0,column=0,sticky='w')
+        ttk.Label(capture,text='Escribí una idea, pegá una captura o contá un avance.',foreground=MUTED).grid(row=1,column=0,sticky='w',pady=(3,7))
+        self.input=tk.Text(capture,height=4,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('Segoe UI',11),wrap='word',padx=12,pady=10)
+        self.input.grid(row=2,column=0,sticky='ew')
+        toolbar=WrapBar(capture);toolbar.grid(row=3,column=0,sticky='ew',pady=5)
+        toolbar.add(ttk.Label(toolbar,text='Idea de'))
+        toolbar.add(ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=12))
+        toolbar.add(ttk.Checkbutton(toolbar,text='Conservar adjuntos',variable=self.keep))
+        for title,cmd in [('Adjuntar',self.attach),('Pegar imagen',self.paste_image),('Grabar',self.record),('Parar y transcribir',lambda:self.stop(False)),('Parar y ejecutar',lambda:self.stop(True))]:toolbar.add(ttk.Button(toolbar,text=title,command=cmd))
+        submit=WrapBar(capture);submit.grid(row=4,column=0,sticky='ew')
+        self.interpret_button=submit.add(ttk.Button(submit,text='Interpretar entrada',style='Accent.TButton',command=self.process))
+        self.selected_button=submit.add(ttk.Button(submit,text='Actualizar seleccionada',command=self.process_selected))
+        self.status=ttk.Label(self,text='Listo · Doble clic en una tarjeta para expandirla.',foreground=MUTED,padding=(18,7),wraplength=700);self.status.grid(row=2,column=0,sticky='ew')
+        self.input.insert('1.0',self.store.setting('draft') or '');self.input.bind('<<Modified>>',self.save_draft)
+        self.refresh();self.after(100,self.poll)
+    def process_selected(self):
+        target=self.selected()
+        if not target:messagebox.showinfo('Elegí una tarjeta','Seleccioná la tarjeta que querés actualizar.');return
+        self.process(target)
     def save_draft(self,event=None):
         if self.input.edit_modified():
             self.store.setting('draft',self.input.get('1.0','end').strip())
@@ -101,7 +124,8 @@ class App(tk.Tk):
         id=self.selected()
         if id:self.editor(self.store.get(id))
     def editor(self,data):
-        w=tk.Toplevel(self); w.title('Detalle de tarjeta'); w.geometry('720x740'); w.configure(bg=BG); fields={}
+        window=tk.Toplevel(self);window.title('Detalle de tarjeta');window.geometry('700x650');window.minsize(480,360);window.configure(bg=BG)
+        area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body;fields={}
         for key,label,values in [('title','Título',None),('kind','Tipo',KINDS),('status','Estado',STATES),('author','Idea de',PEOPLE),('owners','Responsables (separados por coma)',None),('priority','Prioridad',['Baja','Media','Alta','Máxima']),('planned','Fecha prevista · AAAA-MM-DD',None),('deadline','Fecha límite · AAAA-MM-DD o AAAA-MM',None)]:
             ttk.Label(w,text=label).pack(anchor='w',padx=18)
             var=tk.StringVar(value=', '.join(data[key]) if key=='owners' else data[key]); fields[key]=var
@@ -114,8 +138,8 @@ class App(tk.Tk):
         if data.get('questions'):ttk.Label(w,text='Por aclarar: '+' / '.join(data['questions']),wraplength=680).pack(padx=18,pady=8)
         def commit():
             d=copy.deepcopy(data); d.update({k:v.get() for k,v in fields.items()}); d['owners']=[p.strip() for p in d['owners'].split(',') if p.strip()]; d['summary']=summary.get('1.0','end').strip(); d['pending']=pending.get('1.0','end').strip().splitlines()
-            try:self.store.apply([d]); self.refresh(); w.destroy()
-            except Exception as e:messagebox.showerror('Revisar tarjeta',str(e),parent=w)
+            try:self.store.apply([d]); self.refresh(); window.destroy()
+            except Exception as e:messagebox.showerror('Revisar tarjeta',str(e),parent=window)
         ttk.Button(w,text='Guardar',command=commit).pack(pady=12)
     def process(self,target=None):
         if self.busy:return
@@ -213,7 +237,8 @@ class App(tk.Tk):
             box.insert('end',stamp+(' · Deshecho' if undone else '')+'\n'+'\n'.join(d['title'] for d in json.loads(after))+'\n\n')
         box.configure(state='disabled')
     def settings(self):
-        w=tk.Toplevel(self);w.title('Ajustes');w.geometry('650x470');w.configure(bg=BG)
+        window=tk.Toplevel(self);window.title('Ajustes');window.geometry('650x600');window.minsize(480,360);window.configure(bg=BG)
+        area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body
         ttk.Label(w,text='Personas del equipo (una por línea). Guardar y reiniciar.').pack(pady=8)
         roster=tk.Text(w,height=5);roster.insert('1.0','\n'.join(PEOPLE));roster.pack(fill='x',padx=12)
         def save_people():
@@ -224,7 +249,7 @@ class App(tk.Tk):
         ttk.Button(w,text='Guardar equipo local',command=save_people).pack()
         ttk.Label(w,text='Modelo local instalado en Ollama').pack(pady=12);var=tk.StringVar(value=self.store.setting('model') or '');ttk.Entry(w,textvariable=var,width=45).pack()
         ttk.Label(w,text='La IA requiere Ollama en esta PC. No se conectan APIs pagas.\nLa transcripción descarga un modelo local la primera vez.',wraplength=590).pack(pady=12)
-        ttk.Button(w,text='Guardar modelo',command=lambda:(self.store.setting('model',var.get().strip()),w.destroy())).pack()
+        ttk.Button(w,text='Guardar modelo',command=lambda:(self.store.setting('model',var.get().strip()),window.destroy())).pack()
         def backup_folder():
             path=filedialog.askdirectory()
             if path:self.store.setting('backup_folder',path);self.store.backup()
@@ -232,6 +257,9 @@ class App(tk.Tk):
         ttk.Label(w,text=f'Datos locales: {self.store.path}',wraplength=600).pack()
     def finance(self):messagebox.showinfo('Finanzas · Próximamente','Módulo previsto: gastos, ganancias y repartos. Se definirá e implementará más adelante.')
     def updates(self):
-        # Primera entrega: acceso explícito a Releases. Sin ejecutar binarios no verificados.
-        webbrowser.open('https://github.com/neyen-quan/animation-lover-manager/releases')
+        if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de actualizar.');return
+        import sys
+        from .update_dialog import UpdateDialog
+        root=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]
+        UpdateDialog(self,self.store,__version__,root,app=self)
 if __name__=='__main__':App().mainloop()

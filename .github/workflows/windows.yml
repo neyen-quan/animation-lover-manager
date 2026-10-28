@@ -1,32 +1,107 @@
-name: Windows · pruebas y aplicación
+name: Windows · verificar y publicar
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag existente a recompilar (vX.Y.Z); dejar vacío para main'
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: write
+concurrency:
+  group: animation-lover-release
+  cancel-in-progress: false
 jobs:
-  build:
+  release:
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m unittest discover -s tests -v
-      - run: python -m pip install -r requirements.txt pyinstaller
-      - run: python -m PyInstaller --noconfirm --windowed --onedir --name AnimationLoverManager --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers --collect-all sounddevice run.py
-      - run: python run.py --smoke-test
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AnimationLoverManager-Windows-desarrollo
-          path: dist/AnimationLoverManager/
-          retention-days: 14
-      - name: Publicar paquete de desarrollo
+      - name: Decidir si hay versión nueva
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: python scripts/release_plan.py
+      - name: Instalar dependencias probadas en Windows
+        run: python -m pip install -r requirements-build.txt
+      - name: Pruebas de persistencia, actualizador e interfaz
+        timeout-minutes: 3
+        env:
+          ALM_SCREENSHOT: interfaz-windows.png
+        run: python -m unittest discover -s tests -v
+      - name: Compilar programa y actualizador independiente
+        if: steps.plan.outputs.publish == 'true'
+        run: |
+          python -m PyInstaller --noconfirm --windowed --onedir --name AnimationLoverManager --icon assets/icon.ico --add-data "assets;assets" --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers --collect-all sounddevice run.py
+          python -m PyInstaller --noconfirm --windowed --onefile --name ActualizarAnimationLover --icon assets/icon.ico update_worker.py
+          Copy-Item dist/ActualizarAnimationLover.exe dist/AnimationLoverManager/ActualizarAnimationLover.exe
+      - name: Obtener paquete anterior para el delta
+        if: steps.plan.outputs.publish == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          CURRENT_VERSION: ${{ steps.plan.outputs.version }}
         run: |
-          $tag = "dev-0.1.0-${{ github.run_number }}"
-          Compress-Archive -Path dist/AnimationLoverManager -DestinationPath AnimationLoverManager-Windows.zip
-          gh release create $tag AnimationLoverManager-Windows.zip --target "${{ github.sha }}" --title "Desarrollo 0.1.0 · compilación ${{ github.run_number }}" --prerelease --notes "Paquete de desarrollo para pruebas. Extraer el ZIP completo y abrir AnimationLoverManager.exe. La interpretación necesita un modelo local de Ollama configurado. El actualizador automático todavía está pendiente."
+          New-Item -ItemType Directory -Path previous -Force | Out-Null
+          $list = gh release list --limit 100 --json tagName,isDraft,isPrerelease | ConvertFrom-Json
+          $previous = $list | Where-Object { -not $_.isDraft -and -not $_.isPrerelease -and $_.tagName -match '^v\d+\.\d+\.\d+$' -and [version]$_.tagName.Substring(1) -lt [version]$env:CURRENT_VERSION } | Sort-Object { [version]$_.tagName.Substring(1) } -Descending | Select-Object -First 1
+          if ($previous) {
+            gh release download $previous.tagName --pattern 'AnimationLoverManager-Windows-*.zip' --dir previous
+            if ($LASTEXITCODE -ne 0) { throw 'No se pudo obtener la base para el parche' }
+          }
+      - name: Crear paquete completo, parche y latest.json
+        if: steps.plan.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $previous = Get-ChildItem previous -Filter '*.zip' | Select-Object -First 1
+          if ($previous) { python scripts/package_release.py dist/AnimationLoverManager release '${{ github.repository }}' $previous.FullName }
+          else { python scripts/package_release.py dist/AnimationLoverManager release '${{ github.repository }}' }
+          if ($LASTEXITCODE -ne 0) { throw 'Falló el empaquetado' }
+          Copy-Item dist/ActualizarAnimationLover.exe release/ActualizarAnimationLover.exe
+      - name: Probar ejecutable empaquetado
+        if: steps.plan.outputs.publish == 'true'
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $p=Start-Process -FilePath dist/AnimationLoverManager/AnimationLoverManager.exe -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Falló el inicio del ejecutable' }
+      - name: Probar instalación, reinicio y conservación de datos
+        if: steps.plan.outputs.publish == 'true'
+        timeout-minutes: 4
+        run: python scripts/test_packaged_update.py dist/AnimationLoverManager release/AnimationLoverManager-Actualizar-${{ steps.plan.outputs.version }}.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: revision-windows
+          path: interfaz-windows.png
+          if-no-files-found: ignore
+      - name: Publicar todos los archivos antes de habilitar latest
+        if: steps.plan.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG --target '${{ github.sha }}' --draft --title "Animation Lover ${{ steps.plan.outputs.version }}" --notes-file RELEASE_NOTES.md
+            if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear la release' }
+          }
+          $assets = Get-ChildItem release -File | ForEach-Object { $_.FullName }
+          gh release upload $env:RELEASE_TAG @assets --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudieron publicar todos los archivos' }
+          gh release edit $env:RELEASE_TAG --draft=false --latest --prerelease=false
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo habilitar la release' }
+      - name: Verificar descargas y hashes publicados
+        if: steps.plan.outputs.publish == 'true'
+        run: python scripts/verify_release.py release/latest.json
