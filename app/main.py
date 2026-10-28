@@ -7,7 +7,7 @@ from .ai import interpret, transcribe
 
 from . import __version__
 from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, SHELL, apply_theme
-from .widgets import ScrollArea, WrapBar
+from .widgets import ScrollArea, WrapBar, NavItem
 from .board import TaskBoard
 from .windowing import place_window
 
@@ -34,12 +34,12 @@ class App(tk.Tk):
         ttk.Label(nav,text='ESPACIO PERSONAL',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(0,8))
         self.nav_buttons={}
         for v,label in [('Hoy','Mi día'),('Todas','Mi tablero'),('Por persona','Por persona'),('Recientes','Recientes')]:
-            button=ttk.Button(nav,text=label,style='Nav.TButton',command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
+            button=NavItem(nav,text=label,key=v,command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
         ttk.Label(nav,text='ORGANIZACIÓN',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(15,6))
         for v,label in [('Idea','Ideas'),('Roadmap','Roadmap'),('Nota','Notas'),('Papelera','Papelera')]:
-            button=ttk.Button(nav,text=label,style='Nav.TButton',command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
+            button=NavItem(nav,text=label,key=v,command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
         ttk.Separator(nav).pack(fill='x',pady=12)
-        ttk.Button(nav,text='Finanzas · luego',style='Nav.TButton',command=self.finance).pack(fill='x')
+        NavItem(nav,text='Finanzas · luego',key='Finanzas',command=self.finance).pack(fill='x')
         ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8)).pack(anchor='w',padx=10,pady=12)
         content=ttk.Frame(self,padding=(22,16,24,12));content.grid(row=1,column=1,sticky='nsew');self.content=content
         content.columnconfigure(0,weight=1);content.rowconfigure(5,weight=1)
@@ -48,15 +48,16 @@ class App(tk.Tk):
         stats=ttk.Frame(content);stats.grid(row=2,column=0,sticky='ew',pady=(0,12));self.metrics={}
         for index,(key,label,color) in enumerate([('pending','POR HACER','#a7afff'),('running','EN CURSO','#fdab3d'),('overdue','VENCIDAS','#f07188')]):
             stats.columnconfigure(index,weight=1,uniform='metric')
-            tile=tk.Frame(stats,bg=SURFACE,highlightthickness=1,highlightbackground=LINE,padx=16,pady=10);tile.grid(row=0,column=index,sticky='ew',padx=(0,10 if index<2 else 0))
-            number=tk.Label(tile,text='0',font=('Segoe UI',21,'bold'),bg=SURFACE,fg=color);number.pack(anchor='w')
-            caption=tk.Label(tile,text=label,font=('Segoe UI',8,'bold'),bg=SURFACE,fg=MUTED,justify='left');caption.pack(anchor='w',pady=(3,0))
+            tile=tk.Frame(stats,bg='#232c43',highlightthickness=1,highlightbackground='#46516e',padx=16,pady=9);tile.grid(row=0,column=index,sticky='ew',padx=(0,10 if index<2 else 0))
+            tk.Frame(tile,height=2,bg=color).pack(fill='x',pady=(0,5))
+            number=tk.Label(tile,text='0',font=('Segoe UI',21,'bold'),bg='#232c43',fg=color);number.pack(anchor='w')
+            caption=tk.Label(tile,text=label,font=('Segoe UI',9,'bold'),bg='#232c43',fg=color,justify='left');caption.pack(anchor='w',pady=(3,0))
             tile.bind('<Configure>',lambda e,c=caption:c.configure(wraplength=max(50,e.width-32)));self.metrics[key]=number
         tabs=WrapBar(content);tabs.grid(row=3,column=0,sticky='ew',pady=(0,8));self.layout_buttons={}
         for mode,label in [('table','Tabla principal'),('cards','Tarjetas')]:self.layout_buttons[mode]=tabs.add(ttk.Button(tabs,text=label,style='Tab.TButton',command=lambda m=mode:self.set_layout(m)))
-        filters=WrapBar(content);filters.grid(row=4,column=0,sticky='ew',pady=(0,12))
+        filters=WrapBar(content,style='Toolbar.TFrame');filters.inset=5;filters.grid(row=4,column=0,sticky='ew',pady=(0,12))
         filters.add(ttk.Button(filters,text='+ Nueva tarjeta',style='Accent.TButton',command=lambda:self.editor(fresh())))
-        filters.add(ttk.Label(filters,text='Buscar'))
+        filters.add(ttk.Label(filters,text='Buscar',style='Toolbar.TLabel'))
         filters.add(ttk.Entry(filters,textvariable=self.search,width=18))
         box=filters.add(ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12));box.bind('<<ComboboxSelected>>',lambda e:self.refresh());self.people_filter=box
         filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
@@ -150,7 +151,7 @@ class App(tk.Tk):
         self.metrics['overdue'].configure(text=str(sum(urgency(d)==3 for d in active)))
         labels={'Hoy':'Mi día','Todas':'Mi tablero','Idea':'Ideas','Nota':'Notas'}
         self.page_title.configure(text=labels.get(view,view))
-        for key,button in self.nav_buttons.items():button.configure(style='Active.Nav.TButton' if key==view else 'Nav.TButton')
+        for key,button in self.nav_buttons.items():button.set_active(key==view)
         filtered=[]
         for d in sorted(items,key=lambda d:d['updated'],reverse=True) if view=='Recientes' else sorted(items,key=lambda d:(-urgency(d),d['deadline'])):
             if view=='Hoy' and (d['status']=='Terminado' or d['planned']>today().isoformat()):continue

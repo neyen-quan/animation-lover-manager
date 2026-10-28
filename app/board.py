@@ -156,7 +156,7 @@ class TaskBoard(ttk.Frame):
                 h=self.s(46);id=d['id'];shape=self.canvas.create_rectangle(pad,y,pad+width,y+h,fill=SURFACE,outline=LINE,width=1)
                 self.shapes[id]=shape;self.canvas.create_rectangle(pad,y,pad+self.s(4),y+h,fill=color,outline=color)
                 cy=y+h/2
-                self.text(edges[0]+self.s(18),cy,self.fit(d['title'],edges[1]-edges[0]-self.s(34)),'normal')
+                self.text(edges[0]+self.s(18),cy,self.fit(d['title'],edges[1]-edges[0]-self.s(34),'bold'),'bold')
                 if d.get('questions'):self.text(edges[1]-self.s(13),cy,'•','bold','#fdab3d')
                 self.text(edges[1]+self.s(12),cy,d['kind'],'small',KIND_COLORS.get(d['kind'],MUTED))
                 self.owners(edges[2]+self.s(10),cy,d.get('owners'),edges[3]-edges[2]-self.s(18))
@@ -176,6 +176,7 @@ class TaskBoard(ttk.Frame):
         for i,d in enumerate(self.visible_items):
             x=pad+(i%columns)*(colw+gap);y=pad+(i//columns)*(self.s(205)+gap);h=self.s(205)
             shape=self.round_rect(x,y,colw,h,CARD,outline=LINE,radius=10);self.shapes[d['id']]=shape
+            self.canvas.create_line(x+self.s(12),y+self.s(3),x+colw-self.s(12),y+self.s(3),fill='#53607b',width=1)
             color=STATUS_COLORS[d['status']]
             self.canvas.create_oval(x+self.s(15),y+self.s(15),x+self.s(23),y+self.s(23),fill=color,outline=color)
             self.text(x+self.s(30),y+self.s(20),d['status'],'small',color)

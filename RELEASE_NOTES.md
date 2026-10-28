@@ -1,8 +1,11 @@
-Más contraste para las ventanas emergentes.
+Más jerarquía visual y lectura rápida.
 
-- Soltar idea, Actualizar programa, Ajustes, edición de tarjetas, Historial y Preparar mensaje usan un fondo crema suave con texto oscuro.
-- Los campos de escritura tienen un tono cálido más claro y los botones principales mantienen el acento violeta.
-- Un borde violeta define el contorno de cada ventana para distinguirla rápidamente del tablero.
-- Se mantienen el tablero oscuro, el centrado y las funciones existentes.
+- Navegación con iconos dibujados, colores por sección, recuadros suaves y resaltado de la vista activa.
+- Botones con tipografía más marcada, bordes y relieve sutil al pasar el mouse.
+- Indicadores del día con detalles de color y filtros agrupados en una superficie diferenciada.
+- Pop-ups crema con encabezados, etiquetas y grupos de acciones más claros, conservando su contraste y centrado.
+- Títulos de tareas destacados en la tabla y detalles de luz en las tarjetas.
+
+Se mantienen los textos y las funciones existentes.
 
 Actualizar programa → Buscar actualizaciones → Descargar e instalar.
