@@ -6,7 +6,12 @@ from app import __version__
 from app.updater import EXE,HELPER,PRODUCT,atomic_json,digest,prepare_job
 from app.core import Store,fresh
 
-def stop_child(root):
+def stop_child(root,pid=None):
+    if pid:
+        subprocess.run(['taskkill','/PID',str(pid),'/T','/F'],capture_output=True)
+        from app.updater import wait_pid
+        wait_pid(pid,20)
+        return
     # Solo procesos cuyo ejecutable esté dentro de la instalación temporal de prueba.
     escaped=str(root/EXE).replace("'","''")
     script=f"Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -eq '{escaped}' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
@@ -38,5 +43,6 @@ def main():
             assert (jobdir/'backup'/EXE).exists()
             print('Actualización con helper real, reinicio confirmado y datos conservados.')
         finally:
-            stop_child(root);time.sleep(3)
+            receipt=json.loads((jobdir/'result.json').read_text()) if (jobdir/'result.json').exists() else {}
+            stop_child(root,receipt.get('child_pid'));time.sleep(3)
 if __name__=='__main__':main()

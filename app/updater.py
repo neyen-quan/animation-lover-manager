@@ -258,6 +258,7 @@ def worker(jobfile):
             raise UpdateError('La aplicación nueva no confirmó el inicio; se restauró la versión anterior.')
         apply_transaction(job['package'],root,job['from'],base/'backup',health,job.get('sha256'),job['to'])
         result['success']=True
+        result['child_pid']=child.pid if child else None
     except Exception as e:
         result['error']=str(e)
         try:subprocess.Popen([str(root/EXE)],cwd=root)
