@@ -39,7 +39,7 @@ class App(tk.Tk):
         for v,label in [('Idea','Ideas'),('Roadmap','Roadmap'),('Nota','Notas'),('Papelera','Papelera')]:
             button=NavItem(nav,text=label,key=v,command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
         ttk.Separator(nav).pack(fill='x',pady=12)
-        NavItem(nav,text='Finanzas · luego',key='Finanzas',command=self.finance).pack(fill='x')
+        self.finance_button=NavItem(nav,text='Finanzas',key='Finanzas',command=self.finance);self.finance_button.pack(fill='x');self.finance_view=None
         ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8)).pack(anchor='w',padx=10,pady=12)
         content=ttk.Frame(self,padding=(22,16,24,12));content.grid(row=1,column=1,sticky='nsew');self.content=content
         content.columnconfigure(0,weight=1);content.rowconfigure(5,weight=1)
@@ -94,6 +94,9 @@ class App(tk.Tk):
     def toggle_capture(self):
         self.show_capture()
     def show_capture(self):
+        finance_capture=getattr(self,'finance_capture',None)
+        if finance_capture is not None and finance_capture.winfo_exists():
+            finance_capture.lift();messagebox.showinfo('Registro abierto','Cerrá el registro de Finanzas para abrir una entrada de tareas.',parent=finance_capture);return
         if self.busy and getattr(self,'_processing_capture',False):
             messagebox.showinfo('Procesando','Estoy organizando la entrada. La tarjeta aparecerá al terminar.',parent=self);return
         if not self.capture_visible:
@@ -141,7 +144,9 @@ class App(tk.Tk):
             messagebox.showinfo('Operación en curso','Esperá a que termine el procesamiento o detené la grabación.',parent=self); return
         for p in self.tempfiles: Path(p).unlink(missing_ok=True)
         self.store.db.close(); self.destroy()
-    def change_view(self,v): self.view.set(v); self.refresh()
+    def change_view(self,v):
+        if self.finance_view:self.finance_view.grid_remove()
+        self.content.grid();self.finance_button.set_active(False);self.view.set(v);self.refresh()
     def selected(self): return self.tree.selection()[0] if self.tree.selection() else None
     def refresh(self):
         view=self.view.get();items=self.store.items(view=='Papelera');q=self.search.get().casefold();who=self.filter_person.get()
@@ -370,10 +375,15 @@ class App(tk.Tk):
             show_backup_folder();messagebox.showinfo('Respaldo creado','Se guardó una copia en:\n'+str(created)+'\n\nSi elegiste una carpeta sincronizada, Google Drive se encarga de subirla cuando esté activo y tenga conexión.',parent=window)
         ttk.Button(w,text='Carpeta de respaldo (puede ser Google Drive sincronizado)',command=backup_folder).pack(pady=12)
         backup_label.pack(padx=12);show_backup_folder()
-        ttk.Label(w,text='Se conservan las últimas 30 copias de la base de datos. Usá una carpeta exclusiva. Los archivos multimedia adjuntos no se incluyen.',wraplength=570,foreground=MUTED).pack(padx=12,pady=8)
+        ttk.Label(w,text='Se conservan las últimas 30 copias de la base de datos. Usá una carpeta exclusiva. Finanzas incluye sus comprobantes en la subcarpeta Finanzas; los adjuntos de tareas no se incluyen.',wraplength=570,foreground=MUTED).pack(padx=12,pady=8)
         ttk.Label(w,text=f'Datos locales: {self.store.path}',wraplength=600).pack()
         place_window(window,650,600,parent=self)
-    def finance(self):messagebox.showinfo('Finanzas · Próximamente','Módulo previsto: gastos, ganancias y repartos. Se definirá e implementará más adelante.',parent=self)
+    def finance(self):
+        from .finance_ui import FinanceView
+        if self.finance_view is None:self.finance_view=FinanceView(self)
+        self.content.grid_remove();self.finance_view.grid(row=1,column=1,sticky='nsew');self.finance_view.refresh()
+        self.finance_button.set_active(True)
+        for button in self.nav_buttons.values():button.set_active(False)
     def updates(self):
         if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de actualizar.',parent=self);return
         import sys

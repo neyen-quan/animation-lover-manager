@@ -34,7 +34,7 @@ Instalar Ollama, descargar un modelo local compatible y escribir su nombre exact
 
 ## Datos
 
-SQLite, configuración y borrador: `%LOCALAPPDATA%/AnimationLoverManager/`. Los adjuntos se conservan solo cuando se marca esa opción. Copias SQLite después de cada cambio, con 30 versiones; en Ajustes se puede elegir una carpeta sincronizada por Drive. No se incluye todavía restauración gráfica de la base ni respaldo integral de adjuntos.
+SQLite, configuración y borrador: `%LOCALAPPDATA%/AnimationLoverManager/`. Los adjuntos de tareas se conservan solo cuando se marca esa opción. Finanzas conserva los comprobantes asociados por defecto. Copias SQLite después de cada cambio, con 30 versiones; en Ajustes se puede elegir una carpeta sincronizada por Drive. Finanzas agrega copias ZIP autocontenidas (base SQLite y comprobantes) en la subcarpeta `Finanzas` de ese destino. Los adjuntos de tareas todavía no se incluyen en esas copias. No hay restauración gráfica: con el programa cerrado, guardar primero una copia del perfil actual y restaurar juntos `manager.sqlite3` y `finance_receipts` desde el ZIP elegido, quitando los archivos WAL/SHM antiguos. La copia de Finanzas contiene también las tareas y la configuración de ese momento.
 
 ## Desarrollo y publicación
 
@@ -53,3 +53,13 @@ La publicación se prepara como borrador; se suben todos los archivos antes de h
 Para recuperar una publicación fallida: Actions → Windows · verificar y publicar → Run workflow, usando el workflow de main e indicando el tag que se debe recompilar. Esto usa la definición actual del workflow para compilar el código del tag; no se necesita repetir un job viejo. Si el defecto está en el código de ese tag, corregir main e incrementar versión.
 
 No subir bases SQLite, preferencias personales, adjuntos, tokens ni claves. Licencia MIT para este código; las dependencias conservan sus propias licencias.
+
+## Finanzas
+
+Todos los importes son USD y se guardan como centavos enteros. La caja es virtual y representa solo el dinero del negocio. `Retiro` registra bruto, comisión y neto; por defecto no ingresa en caja hasta confirmar recepción. La opción explícita de contar un retiro en tránsito lo incluye una sola vez. `Gasto` distingue caja y bolsillo personal; el segundo genera una deuda con la persona. `Reintegro` reduce caja y deuda sin duplicar el gasto. `Reparto` registra pagos de ganancias sin porcentajes automáticos. Los pagos entre integrantes reasignan deuda sin mover caja.
+
+Finanzas → Registrar acepta texto, imágenes pegadas/adjuntas y audios. Ollama propone campos que siempre se revisan antes de guardar; las imágenes requieren un modelo local con visión. Un PDF se puede conservar como comprobante, pero para interpretarlo se necesita una captura o transcripción de sus datos. El modelo puede equivocarse: verificar importes, fechas y plataforma en la revisión.
+
+Los insights mensuales registran ingresos informados y suscriptores por plataforma, con sus capturas, sin modificar caja. Los campos de texto permiten conservar métricas adicionales. El día 1 se muestran las plataformas pendientes del mes anterior.
+
+Más opciones ofrece categorías editables, desglose de gastos, historial, respaldo e importación del punto de partida. El archivo privado `.almfinance` es un ZIP de datos (manifest `finance.json`, schema 1, product `AnimationLoverFinance`, entries con centavos y receipts por SHA-256). Solo se importa con el libro vacío, valida equipo, comprobantes y saldos, y muestra una confirmación del resumen antes de escribir. Nunca subir archivos de importación o comprobantes reales al repositorio público.

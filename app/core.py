@@ -1,6 +1,6 @@
 """Persistencia local. Ningún dato de uso se guarda en el repositorio."""
 from contextlib import closing
-import calendar, copy, datetime as dt, json, os, sqlite3, uuid
+import calendar, copy, datetime as dt, json, os, sqlite3, uuid, zipfile
 from pathlib import Path
 PEOPLE = ['Persona 1','Persona 2','Persona 3','Persona 4','Persona 5']
 KINDS = ['Tarea','Idea','Roadmap','Nota']
@@ -66,6 +66,8 @@ class Store:
             raise ValueError('Ingresá nombres distintos para cada persona.')
         old=self.setting('people') or list(PEOPLE)
         used=self.db.execute('SELECT EXISTS(SELECT 1 FROM items) OR EXISTS(SELECT 1 FROM history)').fetchone()[0]
+        has_finance=self.db.execute("SELECT 1 FROM sqlite_master WHERE name='finance'").fetchone()
+        if has_finance:used=used or self.db.execute('SELECT EXISTS(SELECT 1 FROM finance)').fetchone()[0]
         if used and len(names)!=len(old):
             raise ValueError('Para conservar las asignaciones, mantené la cantidad de personas y reemplazá cada nombre en su misma línea.')
         mapping=dict(zip(old,names))
@@ -84,6 +86,12 @@ class Store:
                 before={id:remap(d) for id,d in json.loads(before).items()}
                 after=[remap(d) for d in json.loads(after)]
                 self.db.execute('UPDATE history SET before=?,after=? WHERE seq=?',(json.dumps(before,ensure_ascii=False),json.dumps(after,ensure_ascii=False),seq))
+            if has_finance:
+                for id,value in self.db.execute('SELECT id,data FROM finance').fetchall():
+                    data=json.loads(value)
+                    for key in ('person','recipient'):data[key]=mapping.get(data.get(key,''),data.get(key,''))
+                    data['revision']=data.get('revision',0)+1
+                    self.db.execute('UPDATE finance SET data=? WHERE id=?',(json.dumps(data,ensure_ascii=False),id))
             aliases={key:mapping.get(value,value) for key,value in (self.setting('aliases') or {}).items()}
             for key,value in [('people',names),('aliases',aliases)]:
                 self.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',(key,json.dumps(value,ensure_ascii=False)))
@@ -119,6 +127,20 @@ class Store:
         folder=Path(folder or self.setting('backup_folder') or self.path.parent/'backups'); folder.mkdir(parents=True,exist_ok=True)
         path=folder/(dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.sqlite3')
         with closing(sqlite3.connect(path)) as target: self.db.backup(target)
+        # A self-contained copy pairs this exact database snapshot with immutable receipts.
+        media=self.path.parent/'finance_receipts'
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE name='finance'").fetchone():
+            dest=folder/'Finanzas';dest.mkdir(exist_ok=True)
+            final=dest/(path.stem+'.zip');temp=dest/(path.stem+'.tmp')
+            try:
+                with zipfile.ZipFile(temp,'w',zipfile.ZIP_DEFLATED) as z:
+                    z.write(path,'manager.sqlite3')
+                    if media.exists():
+                        for receipt in sorted(media.iterdir()):
+                            if receipt.is_file() and receipt.suffix!='.tmp':z.write(receipt,'finance_receipts/'+receipt.name)
+                temp.replace(final)
+            finally:temp.unlink(missing_ok=True)
+            for old in sorted(dest.glob('*.zip'))[:-30]:old.unlink()
         backups=sorted(folder.glob('*.sqlite3'))
         for p in backups[:-30]: p.unlink()
         return path

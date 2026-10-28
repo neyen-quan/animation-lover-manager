@@ -13,3 +13,7 @@ build/
 release/
 previous/
 interfaz-windows.png
+
+finance_receipts/
+*.almfinance
+interfaz-windows*.png
