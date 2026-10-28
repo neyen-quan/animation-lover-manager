@@ -16,19 +16,24 @@ class UpdateDialog(tk.Toplevel):
         self.channel=tk.StringVar(value=(f'https://github.com/neyen-quan/animation-lover-manager/releases/download/v{__version__}/latest.json' if transition else store.setting('update_channel') or u.CHANNEL))
         self.progress_text=tk.StringVar(value='Buscá una versión nueva en el canal de GitHub.')
         self.available=tk.StringVar(value='Disponible: sin consultar')
-        body=ttk.Frame(self,padding=20);body.pack(fill='both',expand=True)
+        from .widgets import ScrollArea,WrapBar
+        self.area=ScrollArea(self);self.area.pack(fill='both',expand=True)
+        body=ttk.Frame(self.area.body,padding=20);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Actualizaciones',font=('Segoe UI',18,'bold')).pack(anchor='w')
         ttk.Label(body,text='Instalada: '+installed).pack(anchor='w',pady=(10,0))
         ttk.Label(body,textvariable=self.available).pack(anchor='w',pady=(0,12))
         ttk.Label(body,text='Canal de GitHub').pack(anchor='w')
         ttk.Entry(body,textvariable=self.channel).pack(fill='x',pady=6)
-        ttk.Label(body,textvariable=self.progress_text,wraplength=600).pack(fill='x',pady=12)
+        description=ttk.Label(body,textvariable=self.progress_text,wraplength=580);description.pack(fill='x',pady=12)
+        body.bind('<Configure>',lambda e:description.configure(wraplength=max(200,e.width-40)))
         self.progress=ttk.Progressbar(body,mode='indeterminate');self.progress.pack(fill='x')
-        row=ttk.Frame(body);row.pack(fill='x',pady=15)
-        self.check_btn=ttk.Button(row,text='Buscar actualizaciones',command=self.check);self.check_btn.pack(side='left')
-        self.install_btn=ttk.Button(row,text='Descargar e instalar',command=self.install,state='disabled');self.install_btn.pack(side='left',padx=8)
+        row=WrapBar(body);row.pack(fill='x',pady=15)
+        self.check_btn=row.add(ttk.Button(row,text='Buscar actualizaciones',command=self.check))
+        self.install_btn=row.add(ttk.Button(row,text='Descargar e instalar',command=self.install,state='disabled'))
         self.local_btn=ttk.Button(body,text='Instalar ZIP local…',command=self.local);self.local_btn.pack(anchor='w')
-        self.protocol('WM_DELETE_WINDOW',self.close);self.transient(parent);self.grab_set();self.after(100,self.poll)
+        self.protocol('WM_DELETE_WINDOW',self.close)
+        if parent.winfo_viewable():self.transient(parent)
+        self.grab_set();self.after(100,self.poll)
     def close(self):
         if not self.working:self.destroy()
     def task(self,work,done):
@@ -50,7 +55,9 @@ class UpdateDialog(tk.Toplevel):
                     try:done(value)
                     except Exception as e:messagebox.showerror('Actualización',str(e),parent=self)
         except queue.Empty:pass
-        if self.winfo_exists():self.after(100,self.poll)
+        try:
+            if self.winfo_exists():self.after(100,self.poll)
+        except tk.TclError:pass
     def check(self):
         channel=self.channel.get().strip()
         if not u.valid_url(channel) or not channel.endswith('/latest.json'):messagebox.showerror('Canal','Usá HTTPS de GitHub terminado en /latest.json.',parent=self);return

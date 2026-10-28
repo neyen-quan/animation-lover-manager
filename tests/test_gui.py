@@ -18,6 +18,13 @@ class LayoutTests(unittest.TestCase):
      for button in [app.interpret_button,app.selected_button]:
       self.assertGreaterEqual(button.winfo_rooty(),app.area.canvas.winfo_rooty()-1)
       self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),app.area.canvas.winfo_rooty()+app.area.canvas.winfo_height()+1)
+    from app.update_dialog import UpdateDialog
+    dialog=UpdateDialog(app,app.store,'0.2.0',Path(tmp))
+    for scaling in [1.333,2.0,2.667]:
+     app.tk.call('tk','scaling',scaling);app.update()
+     dialog.area.canvas.yview_moveto(1);app.update()
+     self.assertLessEqual(dialog.local_btn.winfo_rooty()+dialog.local_btn.winfo_height(),dialog.area.canvas.winfo_rooty()+dialog.area.canvas.winfo_height()+1)
+    dialog.destroy()
     app.tk.call('tk','scaling',1.333);app.geometry('1180x820');app.update();app.area.canvas.yview_moveto(0);app.update()
     if os.getenv('ALM_SCREENSHOT'):
      from PIL import ImageGrab
