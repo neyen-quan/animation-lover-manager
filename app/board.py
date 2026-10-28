@@ -77,7 +77,7 @@ class TaskBoard(ttk.Frame):
         self.mode=mode if mode in ('table','cards') else 'table';self.page=0;self.render()
     def schedule_render(self,event=None):
         if self.layout_job:self.after_cancel(self.layout_job)
-        self.layout_job=self.after(30,self.render)
+        self.layout_job=self.after_idle(self.render)
     def round_rect(self,x,y,w,h,fill,outline='',radius=6,tags=()):
         r=min(self.s(radius),h/2,w/2)
         points=[x+r,y,x+w-r,y,x+w,y,x+w,y+r,x+w,y+h-r,x+w,y+h,x+w-r,y+h,x+r,y+h,x,y+h,x,y+h-r,x,y+r,x,y]
@@ -114,7 +114,7 @@ class TaskBoard(ttk.Frame):
         label=names[0] if len(names)==1 else f'{len(names)} personas'
         if width-used>self.s(25):self.text(x+used,y,self.fit(label,width-used,'small'),'small',MUTED)
     def render(self):
-        self.layout_job=None
+        if self.layout_job:self.after_cancel(self.layout_job);self.layout_job=None
         if not self.winfo_exists():return
         self.scale=max(.4,min(float(self.tk.call('tk','scaling'))/1.333,self.canvas.winfo_width()/(850 if self.mode=='table' else 500),self.canvas.winfo_height()/205))
         self.fonts={key:tkfont.Font(family='Segoe UI',size=-max(7,round(size*1.333*self.scale)),weight=weight) for key,size,weight in [('normal',10,'normal'),('small',9,'normal'),('bold',10,'bold'),('heading',12,'bold'),('avatar',8,'bold'),('empty',16,'bold')]}
