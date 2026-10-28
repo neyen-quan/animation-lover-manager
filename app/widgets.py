@@ -32,14 +32,21 @@ class ScrollArea(ttk.Frame):
             w=getattr(w,'master',None)
 
 class WrapBar(ttk.Frame):
+    """Flujo sin propagación de columnas: evita ciclos de negociación en Tk."""
     def __init__(self,parent,**kw):
-        super().__init__(parent,**kw);self.children_list=[];self.bind('<Configure>',self.reflow)
-    def add(self,widget):self.children_list.append(widget);widget.grid(row=0,column=len(self.children_list)-1,padx=(0,6),pady=3,sticky='w');return widget
+        super().__init__(parent,height=42,**kw)
+        self.children_list=[];self.bind('<Configure>',self.reflow)
+    def add(self,widget):
+        self.children_list.append(widget);self.after_idle(self.reflow);return widget
     def reflow(self,event=None):
-        width=max(1,self.winfo_width());x=0;row=0;col=0
+        if not self.winfo_exists():return
+        width=max(1,self.winfo_width());x=0;y=3;line_height=0
         for w in self.children_list:
-            needed=w.winfo_reqwidth()+6
-            if x and x+needed>width:row+=1;col=0;x=0
-            info=w.grid_info()
-            if int(info.get('row',-1))!=row or int(info.get('column',-1))!=col:w.grid(row=row,column=col,sticky='w',padx=(0,6),pady=3)
-            col+=1;x+=needed
+            needed=min(w.winfo_reqwidth(),width);height=w.winfo_reqheight()
+            if x and x+needed>width:y+=line_height+6;x=0;line_height=0
+            info=w.place_info()
+            if int(info.get('x',-1))!=x or int(info.get('y',-1))!=y or int(info.get('width',-1))!=needed:
+                w.place(x=x,y=y,width=needed,height=height)
+            x+=needed+6;line_height=max(line_height,height)
+        needed_height=y+line_height+3
+        if int(self.cget('height'))!=needed_height:self.configure(height=needed_height)

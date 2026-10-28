@@ -8,12 +8,12 @@ from .core import Store
 from . import updater as u
 
 class UpdateDialog(tk.Toplevel):
-    def __init__(self,parent,store,installed,root,app=None):
+    def __init__(self,parent,store,installed,root,app=None,transition=False):
         super().__init__(parent)
         from .theme import apply_theme
         apply_theme(self);self.title('Actualizar programa');self.geometry('680x440');self.minsize(540,360)
-        self.store=store;self.installed=installed;self.root_path=Path(root);self.app=app;self.info=None;self.q=queue.Queue();self.working=False
-        self.channel=tk.StringVar(value=store.setting('update_channel') or u.CHANNEL)
+        self.store=store;self.installed=installed;self.root_path=Path(root);self.app=app;self.transition=transition;self.info=None;self.q=queue.Queue();self.working=False
+        self.channel=tk.StringVar(value=(f'https://github.com/neyen-quan/animation-lover-manager/releases/download/v{__version__}/latest.json' if transition else store.setting('update_channel') or u.CHANNEL))
         self.progress_text=tk.StringVar(value='Buscá una versión nueva en el canal de GitHub.')
         self.available=tk.StringVar(value='Disponible: sin consultar')
         body=ttk.Frame(self,padding=20);body.pack(fill='both',expand=True)
@@ -54,7 +54,8 @@ class UpdateDialog(tk.Toplevel):
     def check(self):
         channel=self.channel.get().strip()
         if not u.valid_url(channel) or not channel.endswith('/latest.json'):messagebox.showerror('Canal','Usá HTTPS de GitHub terminado en /latest.json.',parent=self);return
-        self.store.setting('update_channel',channel);self.progress_text.set('Consultando GitHub…')
+        if not self.transition:self.store.setting('update_channel',channel)
+        self.progress_text.set('Consultando GitHub…')
         def done(info):
             self.info=info;self.available.set('Disponible: '+info['version'])
             if info['current']:self.progress_text.set('Ya tenés la última versión disponible.')
@@ -90,6 +91,7 @@ class UpdateDialog(tk.Toplevel):
         data=self.store.path.parent
         def done(base):
             if self.app:self.app.save_draft()
+            if self.transition:self.store.setting('update_channel',u.CHANNEL)
             self.store.db.close()
             (base/'go').write_text('go')
             self.master.destroy()
@@ -105,6 +107,6 @@ def bootstrap():
     store=Store()
     try:installed=u.installed_version(root,'0.1.0')
     except Exception as e:messagebox.showerror('Instalación',str(e));parent.destroy();return
-    dialog=UpdateDialog(parent,store,installed,root)
+    dialog=UpdateDialog(parent,store,installed,root,transition=u.version(installed)<u.version(__version__))
     dialog.protocol('WM_DELETE_WINDOW',lambda:parent.destroy() if not dialog.working else None)
     dialog.after(300,dialog.check);parent.mainloop()
