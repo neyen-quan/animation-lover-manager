@@ -7,7 +7,7 @@ from app.updater import EXE,HELPER,PRODUCT,atomic_json,digest,prepare_job
 from app.core import Store,fresh,PEOPLE
 from app.finance import Finance,entry as finance_entry,totals
 from app.projects import Projects
-from app.wallets import WalletBook
+from app.wallets import WalletBook,profile
 
 def stop_child(root,pid=None):
     if pid:
@@ -46,8 +46,9 @@ def main():
         finance=Finance(store);proof=base/'proof.txt';proof.write_text('Synthetic finance receipt')
         expense=finance_entry('Gasto');expense.update(description='Synthetic expense',person=PEOPLE[0],funding='Bolsillo personal',amount=1250,attachments=[finance.attachment(proof)])
         finance.save([expense])
-        WalletBook(store).save({store.people()[0]:'0x'+'12'*20})
-        WalletBook(store).draft(store.people()[1],'wallet draft')
+        # Emulate the address-only format already installed before this release.
+        store.setting('finance_wallets',{store.people()[0]:'0x'+'12'*20})
+        store.setting('finance_wallet_drafts',{store.people()[1]:'wallet draft'})
         projects=Projects(store)
         config=dict(product='AnimationLoverProject',schema=1,project=dict(id='update-personal',name='Personal update test',personal=True),expenses=[dict(description='Synthetic personal subscription',cents=1700,category='Suscripciones')])
         config_path=base/'synthetic.almproject';config_path.write_text(json.dumps(config))
@@ -72,8 +73,8 @@ def main():
             assert personal.setting('draft')=='personal draft'
             assert totals(Finance(personal).rows())['debt_total']==1700
             assert check.get(personal_card['id']) is None
-            assert WalletBook(check).values()=={check.people()[0]:'0x'+'12'*20}
-            assert WalletBook(check).drafts()=={check.people()[1]:'wallet draft'}
+            assert WalletBook(check).values()=={check.people()[0]:profile('0x'+'12'*20)}
+            assert WalletBook(check).drafts()=={check.people()[1]:profile('wallet draft')}
             assert personal.setting('finance_wallets') is None
             registry.close()
             assert json.loads((root/'installation.json').read_text())['version']==__version__

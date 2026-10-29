@@ -1,6 +1,7 @@
-# Animation Lover 0.5.5
+# Animation Lover 0.5.6
 
-- Finanzas de Animation Lover agrega Billeteras: una dirección USDT BEP20 / BSC por integrante.
-- Campos editables con Guardar y Copiar; los borradores se conservan para completar más adelante.
-- Carga inicial mediante archivo privado, sin publicar direcciones en GitHub ni reemplazar billeteras existentes por error.
-- Las billeteras se incluyen en los respaldos y conservan su asociación al renombrar al equipo.
+- Cada integrante tiene un perfil con dos métodos independientes: Cripto y Kast.
+- Cripto permite editar moneda, red y billetera; Kast guarda su usuario.
+- Se puede completar solo Cripto, solo Kast o ambos, con botones separados para copiar.
+- Las billeteras anteriores se conservan como USDT / BEP20-BSC, sin volver a cargarlas.
+- Cambiar de perfil conserva los borradores. Los datos siguen incluidos en los respaldos.
