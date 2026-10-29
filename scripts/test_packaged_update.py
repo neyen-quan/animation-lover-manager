@@ -5,7 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app import __version__
 from app.updater import EXE,HELPER,PRODUCT,atomic_json,digest,prepare_job
 from app.core import Store,fresh,PEOPLE
-from app.finance import Finance,entry,totals
+from app.finance import Finance,entry as finance_entry,totals
 
 def stop_child(root,pid=None):
     if pid:
@@ -42,7 +42,7 @@ def main():
         info=json.loads((root/'installation.json').read_text());installed=info['version'] if len(sys.argv)>3 else '0.1.9';info['version']=installed;atomic_json(root/'installation.json',info)
         store=Store();card=fresh('Prueba de conservación');store.apply([card]);store.setting('model','modelo-de-prueba');store.setting('draft','borrador conservado');db=store.path
         finance=Finance(store);proof=base/'proof.txt';proof.write_text('Synthetic finance receipt')
-        expense=entry('Gasto');expense.update(description='Synthetic expense',person=PEOPLE[0],funding='Bolsillo personal',amount=1250,attachments=[finance.attachment(proof)])
+        expense=finance_entry('Gasto');expense.update(description='Synthetic expense',person=PEOPLE[0],funding='Bolsillo personal',amount=1250,attachments=[finance.attachment(proof)])
         finance.save([expense]);store.db.close()
         before=digest(db)
         # Copia independiente del helper para simular la llamada de la aplicación.
