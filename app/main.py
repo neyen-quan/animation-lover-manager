@@ -94,6 +94,10 @@ class App(tk.Tk):
     def toggle_capture(self):
         self.show_capture()
     def show_capture(self):
+        finance_view=getattr(self,'finance_view',None)
+        composer=getattr(finance_view,'composer',None)
+        if composer is not None and composer.stream:
+            self.finance();return
         finance_capture=getattr(self,'finance_capture',None)
         if finance_capture is not None and finance_capture.winfo_exists():
             finance_capture.lift();messagebox.showinfo('Registro abierto','Cerrá el registro de Finanzas para abrir una entrada de tareas.',parent=finance_capture);return

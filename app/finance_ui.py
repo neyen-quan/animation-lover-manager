@@ -9,7 +9,7 @@ import wave
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
-from .finance import Finance, KINDS, PLATFORMS, entry, cents, usd, totals
+from .finance import Finance, KINDS, PLATFORMS, entry, cents, usd, totals, outstanding
 from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, apply_popup_theme
 from .widgets import WrapBar, ScrollArea
 from .windowing import place_window
@@ -27,13 +27,13 @@ class FinanceView(ttk.Frame):
         self.metric_frame = tk.Canvas(self, height=86, bg=BG, highlightthickness=0)
         self.metric_frame.grid(row=2, column=0, sticky='ew', pady=(0,8))
         self.metric_frame.bind('<Configure>', lambda e:self.draw_metrics())
-        tabs = WrapBar(self); tabs.grid(row=3,column=0,sticky='ew',pady=(0,5)); self.tabs={}
+        tabs = WrapBar(self); self.tab_bar=tabs; tabs.grid(row=3,column=0,sticky='ew',pady=(0,5)); self.tabs={}
         for label in ['Resumen','Movimientos','Por persona','Insights mensuales']:
             self.tabs[label] = tabs.add(ttk.Button(tabs,text=label,command=lambda v=label:self.show(v)))
-        tools = WrapBar(self); tools.grid(row=4,column=0,sticky='ew',pady=(0,7))
-        for label, command in [('+ Registrar', self.capture), ('+ Gasto', lambda:self.edit(entry('Gasto'))),
-                               ('+ Retiro', lambda:self.edit(entry('Retiro'))), ('+ Reintegro', lambda:self.edit(entry('Reintegro'))),
-                               ('+ Reparto', lambda:self.edit(entry('Reparto')))]:
+        tools = WrapBar(self); self.tools=tools; tools.grid(row=4,column=0,sticky='ew',pady=(0,7))
+        for label, command in [('+ Registrar', self.capture), ('+ Gasto', lambda:self.capture('Gasto')),
+                               ('+ Retiro', lambda:self.capture('Retiro')), ('+ Reintegro', lambda:self.capture('Reintegro')),
+                               ('+ Reparto', lambda:self.capture('Reparto'))]:
             tools.add(ttk.Button(tools, text=label, command=command, style='Accent.TButton' if label=='+ Registrar' else 'TButton'))
         self.body=ttk.Frame(self);self.body.grid(row=5,column=0,sticky='nsew');self.body.rowconfigure(2,weight=1);self.body.columnconfigure(0,weight=1)
         filters=WrapBar(self.body);filters.grid(row=0,column=0,sticky='ew')
@@ -47,19 +47,20 @@ class FinanceView(ttk.Frame):
         style.configure('Finance.Treeview.Heading',background=CARD,foreground=FG,font=('Segoe UI',10,'bold'),padding=7,bordercolor=LINE,lightcolor=LINE,darkcolor=LINE,relief='flat')
         style.map('Finance.Treeview',background=[('selected','#3b477a')],foreground=[('selected','#ffffff')])
         self.table=ttk.Treeview(self.body,show='headings',style='Finance.Treeview',selectmode='browse',height=3)
-        self.table.grid(row=2,column=0,sticky='nsew');self.table.bind('<Double-1>',lambda e:self.open_selected())
-        self.table.bind('<Return>',lambda e:self.open_selected());self.table.bind('<Configure>',self.resize_table)
+        self.table.grid(row=2,column=0,sticky='nsew');self.table.bind('<Double-1>',lambda e:self.open_selected(quick=True))
+        self.table.bind('<Return>',lambda e:self.open_selected(quick=True));self.table.bind('<Configure>',self.resize_table)
         # Paging owns navigation; wheel must not reveal an additional scroll viewport.
         for event in ('<MouseWheel>','<Button-4>','<Button-5>'):self.table.bind(event,lambda e:'break')
         self.table.tag_configure('pending',foreground='#fdc56f');self.table.tag_configure('void',foreground=MUTED)
-        bottom=WrapBar(self);bottom.grid(row=6,column=0,sticky='ew',pady=(7,0))
+        bottom=WrapBar(self);self.bottom=bottom;bottom.grid(row=6,column=0,sticky='ew',pady=(7,0))
+        self.reimburse_button=bottom.add(ttk.Button(bottom,text='Reintegrar',command=self.reimburse_selected))
         self.open_button=bottom.add(ttk.Button(bottom,text='Abrir / editar',command=self.open_selected))
         bottom.add(ttk.Button(bottom,text='Anterior',command=lambda:self.turn(-1)))
         self.page_label=bottom.add(ttk.Label(bottom,text=''))
         bottom.add(ttk.Button(bottom,text='Siguiente',command=lambda:self.turn(1)))
         bottom.add(ttk.Button(bottom,text='Más opciones',command=self.options))
         self.query.trace_add('write',lambda *a:self.reload())
-        self.page_size=5;self.rows=[];self.display_rows=[];self.refresh()
+        self.composer=None;self.page_size=5;self.rows=[];self.display_rows=[];self.refresh()
         self.bind('<Configure>',self.fit_workspace)
         style.configure('Finance.TButton',font=('Segoe UI',-13,'bold'),padding=(8,6))
         style.configure('Finance.Accent.TButton',font=('Segoe UI',-13,'bold'),padding=(8,6),background=ACCENT,foreground='white')
@@ -75,14 +76,16 @@ class FinanceView(ttk.Frame):
         else:self.chart.grid()
         for button in self.tabs.values():button.configure(padding=(8,6))
 
-    def show(self, section):self.section=section;self.page=0;self.refresh()
+    def show(self, section):
+        if not self.leave_capture():return
+        self.section=section;self.page=0;self.refresh()
     def reload(self):self.page=0;self.refresh()
     def turn(self,delta):self.page=max(0,min(self.pages-1,self.page+delta));self.render_table()
     def resize_table(self,event):
         size=max(1,(event.height-36)//30)
         if size != self.page_size:self.page_size=size;self.render_table()
     def refresh(self):
-        self.rows=self.ledger.rows();self.balance=totals(self.rows)
+        self.rows=self.ledger.rows();self.balance=totals(self.rows);self.claims=outstanding(self.rows)
         months=sorted({d['date'][:7] for d in self.rows}|{d['period'] for d in self.rows if d['kind']=='Insight'},reverse=True)
         self.month_box.configure(values=['Todos']+months)
         for key,button in self.tabs.items():button.configure(style='Active.Tab.TButton' if key==self.section else 'Tab.TButton',padding=(8,6))
@@ -140,6 +143,9 @@ class FinanceView(ttk.Frame):
             self.display_rows=[]
             for d in sorted(candidates,key=lambda d:(d['date'],d['id']),reverse=True):
                 state='Anulado' if d['void'] else ('Recibido' if d['received'] else 'En tránsito · en caja' if d['include_pending'] else 'Pendiente de ingreso') if d['kind']=='Retiro' else d['funding'] if d['kind']=='Gasto' else 'Registrado'
+                if d['id'] in self.claims:
+                    remaining=self.claims[d['id']]['remaining']
+                    state=('Por reintegrar '+usd(remaining)) if remaining else 'Reintegrado / compensado'
                 self.display_rows.append((d['id'],(d['date'],d['kind'],d['description'],d['platform'] or d['person'],usd(d['amount']),state),('void',) if d['void'] else ('pending',) if d['kind']=='Retiro' and not d['received'] else ()))
         self.table.configure(columns=[x[0] for x in cols])
         width=max(400,self.table.winfo_width()-4);weight=sum(x[1] for x in cols)
@@ -150,13 +156,16 @@ class FinanceView(ttk.Frame):
         self.page_label.configure(text=f'{self.page+1} / {self.pages} · {len(self.display_rows)} registros')
         self.open_button.configure(text='+ Cargar insights' if self.section=='Insights mensuales' and not self.display_rows else 'Abrir / editar')
 
-    def open_selected(self):
+    def open_selected(self,quick=False):
         selection=self.table.selection()
         if self.section=='Por persona':
             if selection:
-                d=entry('Reintegro');d.update(person=selection[0],amount=self.balance['debt'].get(selection[0],0),description='Reintegro de gastos adelantados');self.edit(d)
-        elif selection:self.edit(self.ledger.get(selection[0]))
-        elif self.section=='Insights mensuales':self.edit(entry('Insight'))
+                self.quick_reimbursement(person=selection[0])
+        elif selection:
+            d=self.ledger.get(selection[0])
+            if quick and d['id'] in self.claims:self.quick_reimbursement(source_id=d['id'])
+            else:self.edit(d)
+        elif self.section=='Insights mensuales':self.capture('Insight')
 
     def report_saved(self):
         self.refresh();self.app.status.configure(text=self.ledger.backup_warning or 'Finanzas guardadas · Comprobantes conservados')
@@ -166,7 +175,7 @@ class FinanceView(ttk.Frame):
         w=tk.Toplevel(self.app);w.title('Finanzas · Opciones')
         body=ttk.Frame(w,padding=22);body.pack(fill='both',expand=True)
         def do(fn):w.destroy();fn()
-        for label,fn in [('Cargar insights mensuales',lambda:self.edit(entry('Insight'))),('Importar punto de partida',self.import_start),('Categorías de gastos',self.categories),('Gastos por categoría',self.category_report),('Historial de cambios',self.history),('Pago entre integrantes',lambda:self.edit(entry('Traspaso personal'))),('Respaldar ahora',self.backup)]:
+        for label,fn in [('Cargar insights mensuales',lambda:self.capture('Insight')),('Importar punto de partida',self.import_start),('Categorías de gastos',self.categories),('Gastos por categoría',self.category_report),('Historial de cambios',self.history),('Pago entre integrantes',lambda:self.edit(entry('Traspaso personal'))),('Respaldar ahora',self.backup)]:
             ttk.Button(body,text=label,command=lambda f=fn:do(f)).pack(fill='x',pady=4)
         place_window(w,500,460,parent=self.app)
 
@@ -281,6 +290,8 @@ class FinanceView(ttk.Frame):
         footer.add(ttk.Button(footer,text='Guardar movimiento',style='Accent.TButton',command=save))
         footer.add(ttk.Button(footer,text='Cancelar',command=w.destroy))
         if self.ledger.get(d['id']):
+            if d['id'] in outstanding(self.ledger.rows()):
+                footer.add(ttk.Button(footer,text='Reintegrar',command=lambda:self.quick_reimbursement(source_id=d['id'])))
             def void():
                 if messagebox.askyesno('Anular movimiento','Se revertirá su efecto en los saldos y quedará en el historial. ¿Continuar?',parent=w):
                     try:
@@ -309,79 +320,59 @@ class FinanceView(ttk.Frame):
                 webbrowser.open(p.as_uri())
         except Exception as e:messagebox.showerror('Comprobante',str(e),parent=parent)
 
-    def capture(self):
-        existing=getattr(self.app,'finance_capture',None)
-        if existing is not None and existing.winfo_exists():existing.lift();return
+    def capture(self,hint=None):
         if self.app.busy or self.app.recording:return
         self.app.hide_capture()
-        w=tk.Toplevel(self.app);w.title('Registrar en Finanzas');w.transient(self.app);self.app.finance_capture=w
+        if self.composer is None:
+            from .finance_capture import FinanceCapture
+            self.composer=FinanceCapture(self)
+        self.body.grid_remove();self.bottom.grid_remove();self.metric_frame.grid_remove();self.tab_bar.grid_remove();self.tools.grid_remove()
+        self.composer.grid(row=5,column=0,rowspan=2,sticky='nsew');self.composer.start(hint)
+        return self.composer
+
+    def leave_capture(self):
+        if self.composer and self.composer.winfo_ismapped():
+            if self.app.busy or self.app.recording:
+                self.composer.status.configure(text='Terminá la grabación o el procesamiento antes de volver.');return False
+            self.composer.grid_remove()
+        self.body.grid();self.bottom.grid();self.metric_frame.grid();self.tab_bar.grid();self.tools.grid();return True
+
+    def reimburse_selected(self):
+        selection=self.table.selection()
+        if not selection:
+            self.show('Por persona');self.app.status.configure(text='Hacé doble clic en la persona a la que ya le pagaste.');return
+        if self.section=='Por persona':self.quick_reimbursement(person=selection[0])
+        elif selection[0] in self.claims:self.quick_reimbursement(source_id=selection[0])
+        else:messagebox.showinfo('Reintegrar','Elegí un gasto pagado de bolsillo o una persona con saldo pendiente.',parent=self.app)
+
+    def quick_reimbursement(self,source_id=None,person=None):
+        try:proposal=self.ledger.reimbursement(source_id,person)
+        except ValueError as e:messagebox.showinfo('Reintegrar',str(e),parent=self.app);return
+        w=tk.Toplevel(self.app);w.withdraw();w.transient(self.app);w.title('Registrar reintegro')
         body=ttk.Frame(w,padding=22);body.pack(fill='both',expand=True)
-        ttk.Label(body,text='Contame el movimiento',font=('Segoe UI',18,'bold')).pack(anchor='w')
-        ttk.Label(body,text='Texto, voz o comprobantes. Revisás los datos antes de guardarlos.',foreground=MUTED).pack(anchor='w',pady=8)
-        box=tk.Text(body,height=7,wrap='word');box.pack(fill='both',expand=True)
-        box.insert('1.0',self.app.store.setting('finance_draft') or '')
-        paths=[];status=ttk.Label(body,text='Los comprobantes se conservan con el movimiento.',wraplength=650);status.pack(fill='x',pady=8)
-        toolbar=WrapBar(body);toolbar.pack(fill='x');pending=[];rec={'stream':None,'chunks':[],'timer':None}
-        def draft(*_):self.app.store.setting('finance_draft',box.get('1.0','end').strip())
-        def close():
-            if rec['stream'] or self.app.busy:messagebox.showinfo('Esperá','Terminá la grabación o el procesamiento antes de cerrar.',parent=w);return
-            draft();w.destroy()
-        w.protocol('WM_DELETE_WINDOW',close)
-        def attach():paths.extend(filedialog.askopenfilenames(parent=w));status.configure(text=f'{len(paths)} adjuntos')
+        ttk.Label(body,text='Reintegrar a '+proposal['person'],font=('Segoe UI',18,'bold')).pack(anchor='w')
+        ttk.Label(body,text=usd(proposal['amount']),font=('Segoe UI',24,'bold')).pack(anchor='w',pady=(12,4))
+        if not proposal['amount']:
+            ttk.Label(body,text='Este gasto o adelanto ya está reintegrado o compensado. No queda saldo pendiente.',wraplength=500).pack(anchor='w',pady=12)
+            ttk.Button(body,text='Cerrar',command=w.destroy).pack(anchor='e');place_window(w,600,290,parent=self.app);return w
+        description=self.ledger.get(source_id)['description'] if source_id else 'Saldo total pendiente con esta persona'
+        ttk.Label(body,text=description,wraplength=500).pack(anchor='w',pady=4)
+        ttk.Label(body,text='Confirmá cuando ya hayas enviado el dinero. Se descuenta de caja y se salda el reintegro.',foreground=MUTED,wraplength=500).pack(anchor='w',pady=10)
+        paths=[];files=ttk.Label(body,text='Comprobante opcional.',wraplength=500);files.pack(anchor='w',pady=6)
+        def labels():files.configure(text=', '.join(Path(p).name for p in paths) or 'Comprobante opcional.')
+        def attach():paths.extend(filedialog.askopenfilenames(parent=w,title='Comprobante del reintegro'));labels()
         def paste():
-            try:paths.append(self.clipboard_image());status.configure(text=f'{len(paths)} adjuntos')
+            try:paths.append(self.clipboard_image());labels()
             except Exception as e:messagebox.showerror('Pegar captura',str(e),parent=w)
-        def record():
-            if self.app.busy or self.app.recording:return
+        toolbar=WrapBar(body);toolbar.pack(fill='x')
+        toolbar.add(ttk.Button(toolbar,text='Adjuntar comprobante',command=attach));toolbar.add(ttk.Button(toolbar,text='Pegar captura',command=paste))
+        footer=WrapBar(body);footer.pack(fill='x',pady=(12,0))
+        def confirm():
             try:
-                import sounddevice as sd
-                rec['chunks']=[]
-                rec['stream']=sd.RawInputStream(samplerate=16000,channels=1,dtype='int16',callback=lambda data,frames,time,status:rec['chunks'].append(bytes(data)))
-                rec['stream'].start();self.app.recording=rec['stream'];rec['timer']=w.after(3600000,stop);status.configure(text='Grabando… Tocá Parar y transcribir.')
-            except Exception as e:
-                if rec['stream']:rec['stream'].close()
-                rec['stream']=None;self.app.recording=None;messagebox.showerror('Micrófono',str(e),parent=w)
-        def stop():
-            if not rec['stream']:return
-            w.after_cancel(rec['timer']);rec['stream'].stop();rec['stream'].close();rec['stream']=None;self.app.recording=None
-            p=Path(tempfile.gettempdir())/(str(uuid.uuid4())+'.wav');self.app.tempfiles.append(str(p))
-            with wave.open(str(p),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000);f.writeframes(b''.join(rec['chunks']))
-            from .ai import transcribe
-            def done(text):box.insert('end','\n'+text);draft();status.configure(text='Transcripción lista. Revisala o interpretá el movimiento.')
-            self.app.run(lambda:transcribe(p),done)
-        def review_next():
-            if pending:
-                proposal=pending.pop(0);self.edit(proposal,paths=paths,after_save=review_next)
-            else:
-                if w.winfo_exists():box.delete('1.0','end');paths.clear();draft();status.configure(text='Movimientos guardados. Podés cerrar o cargar otro.');w.lift()
-        def process():
-            if self.app.busy or self.app.recording:return
-            from .finance_ai import extract
-            text=box.get('1.0','end').strip();draft();snap=list(paths)
-            model=self.app.store.setting('model');people=list(self.ledger.people());categories=self.ledger.categories()
-            if not text and not snap:return
-            status.configure(text='Interpretando localmente… Los importes se revisan antes de guardar.')
-            def done(result):
-                if result.get('questions'):
-                    status.configure(text='Agregá la aclaración al texto y volvé a interpretar.');messagebox.showinfo('Necesito aclarar','\n'.join(map(str,result['questions'])),parent=w);return
-                pending.clear()
-                for proposal in result.get('entries',[]):
-                    if not isinstance(proposal,dict):raise ValueError('Propuesta inválida.')
-                    d=entry(proposal.get('kind','Gasto'));d['date']='';d['funding']='';d['category']=''
-                    # Missing amounts never silently become a valid transaction.
-                    if 'amount' not in proposal:raise ValueError('Falta el importe. Agregalo al texto y volvé a interpretar.')
-                    for key in ('date','description','person','platform','category','funding','reference','period'):
-                        if key in proposal:d[key]=str(proposal[key])
-                    for key in ('amount','gross','fee'):
-                        if key in proposal:d[key]=cents(proposal[key])
-                    if d['kind']=='Retiro' and not all(k in proposal for k in ('gross','fee')):
-                        raise ValueError('Falta bruto o comisión del retiro. Agregalos antes de continuar.')
-                    if proposal.get('subscribers') is not None:d['subscribers']=int(proposal['subscribers'])
-                    d['notes']=str(proposal.get('notes',''))+'\n\nEntrada original:\n'+text
-                    pending.append(d)
-                if not pending:raise ValueError('No se identificaron movimientos. Agregá más detalle.')
-                status.configure(text=f'{len(pending)} propuestas. Revisá y guardá cada una.');review_next()
-            self.app.run(lambda:extract(text,snap,model,people,categories),done)
-        for label,cmd in [('Adjuntar',attach),('Pegar captura',paste),('Grabar',record),('Parar y transcribir',stop),('Interpretar',process)]:toolbar.add(ttk.Button(toolbar,text=label,command=cmd,style='Accent.TButton' if label=='Interpretar' else 'TButton'))
-        place_window(w,840,520,parent=self.app)
+                self.ledger.pay_reimbursement(proposal,paths);w.destroy();self.report_saved()
+            except Exception as e:messagebox.showerror('Registrar reintegro',str(e),parent=w)
+        confirm_button=footer.add(ttk.Button(footer,text='Ya lo pagué · registrar',style='Accent.TButton',command=confirm))
+        footer.add(ttk.Button(footer,text='Cancelar',command=w.destroy))
+        w.reimbursement_proposal=proposal;w.confirm_button=confirm_button
+        place_window(w,640,440,parent=self.app)
         return w

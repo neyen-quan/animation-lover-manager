@@ -32,7 +32,7 @@ def entry(kind='Gasto'):
                 description='', person='', recipient='', platform='', category='Otros',
                 funding='Caja', amount=0, fee=0, gross=0, received=False,
                 include_pending=False, reference='', notes='', attachments=[], void=False,
-                period=dt.date.today().strftime('%Y-%m'), subscribers=None, revision=0)
+                period=dt.date.today().strftime('%Y-%m'), subscribers=None, revision=0, source_id='')
 
 def validate(data, people, categories):
     d = copy.deepcopy(data)
@@ -57,6 +57,8 @@ def validate(data, people, categories):
     if d['kind'] == 'Traspaso personal':
         if d.get('recipient') not in people or d['recipient'] == d['person']:
             raise ValueError('Indicá quién recibió el pago personal, distinto del emisor.')
+    if d.get('source_id') and (d['kind'] != 'Reintegro' or not re.fullmatch(r'[a-zA-Z0-9_-]{1,80}', d['source_id'])):
+        raise ValueError('Vínculo de reintegro inválido.')
     if d['kind'] == 'Insight':
         if not re.fullmatch(r'\d{4}-\d{2}', d.get('period', '')): raise ValueError('Usá período AAAA-MM.')
         dt.date.fromisoformat(d['period'] + '-01')
@@ -99,6 +101,32 @@ def totals(rows):
     out['debt_total'] = sum(out['debt'].values())
     out['free'] = out['cash'] - out['debt_total']
     return out
+
+def outstanding(rows):
+    """Allocate legacy settlements and explicit links without changing historical rows.
+
+    Personal transfers settle the recipient's oldest claims and create a claim for
+    the sender. Legacy unlinked reimbursements also settle oldest claims. Explicit
+    reimbursements reserve their own source before those unlinked payments.
+    """
+    active=sorted((d for d in rows if not d['void']),key=lambda d:(d['date'],d['id']))
+    claims={d['id']:dict(person=d['person'],amount=d['amount'],remaining=d['amount'])
+            for d in active if (d['kind']=='Gasto' and d['funding']=='Bolsillo personal') or d['kind']=='Traspaso personal'}
+    def consume(person,amount,source=None):
+        if source:
+            if source not in claims or claims[source]['person']!=person:
+                raise ValueError('El gasto vinculado al reintegro no corresponde a esa persona.')
+            candidates=[claims[source]]
+        else:candidates=[c for c in claims.values() if c['person']==person]
+        for c in candidates:
+            n=min(amount,c['remaining']);c['remaining']-=n;amount-=n
+        if amount:raise ValueError('El reintegro o la compensación supera lo pendiente del gasto o la persona.')
+    for d in active:
+        if d['kind']=='Traspaso personal':consume(d['recipient'],d['amount'])
+    reimbursements=[d for d in active if d['kind']=='Reintegro']
+    for d in sorted(reimbursements,key=lambda d:not bool(d.get('source_id'))):
+        consume(d['person'],d['amount'],d.get('source_id'))
+    return claims
 
 class Finance:
     def __init__(self, store):
@@ -153,6 +181,7 @@ class Finance:
         t = totals(active)
         if t['cash'] < 0: raise ValueError('La caja quedaría negativa. Revisá los ingresos y los gastos.')
         if any(n < 0 for n in t['debt'].values()): raise ValueError('El reintegro o traspaso supera la deuda con esa persona.')
+        outstanding(active)
         insights = [(d['period'], d['platform']) for d in active if d['kind'] == 'Insight']
         if len(insights) != len(set(insights)): raise ValueError('Ya hay insights de esa plataforma y mes. Abrí ese registro para actualizarlo.')
         with self.db:
@@ -164,6 +193,31 @@ class Finance:
         try: self.store.backup()
         except Exception as e: self.backup_warning = 'Guardado localmente. No se pudo respaldar: ' + str(e)
         return checked
+
+    def reimbursement(self, source_id=None, person=None):
+        rows=self.rows()
+        if source_id:
+            source=self.get(source_id);claim=outstanding(rows).get(source_id)
+            if not source or not claim:raise ValueError('Elegí un gasto pagado de bolsillo o un adelanto personal.')
+            amount=claim['remaining'];person=claim['person'];description='Reintegro · '+source['description']
+        else:
+            if person not in self.people():raise ValueError('Seleccioná una persona.')
+            amount=totals(rows)['debt'].get(person,0);description='Reintegro de gastos adelantados'
+        d=entry('Reintegro');d.update(person=person,amount=amount,source_id=source_id or '',description=description)
+        return d
+
+    def pay_reimbursement(self, proposal, paths=()):
+        """Commit the reviewed payment once, rejecting a stale amount."""
+        existing=self.get(proposal['id'])
+        if existing:
+            if existing['kind']=='Reintegro' and not existing['void']:return existing
+            raise ValueError('El registro de reintegro cambió. Volvé a abrirlo.')
+        current=self.reimbursement(proposal.get('source_id'),proposal['person'])
+        if not current['amount']:raise ValueError('Ese reintegro ya está saldado.')
+        if current['amount']!=proposal['amount']:raise ValueError('El saldo cambió. Volvé a abrir Reintegrar para ver el monto actual.')
+        d=copy.deepcopy(proposal)
+        d['attachments']=[self.attachment(p) for p in paths]
+        return self.save([d])[0]
 
     def confirm(self, id):
         d = self.get(id)
