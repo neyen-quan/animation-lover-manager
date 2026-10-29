@@ -19,8 +19,11 @@ class FinanceView(ttk.Frame):
     def __init__(self, app):
         super().__init__(app, padding=(22,16,24,12))
         self.app = app; self.ledger = Finance(app.store);self.personal=bool(app.store.setting('personal'))
+        # Keep all finance tabs on one row at the supported minimum width.
+        for name in ('Finance.Tab.TButton','Finance.Active.Tab.TButton'):
+            ttk.Style(self).configure(name,font=('Segoe UI',-13,'bold'),padding=(8,6))
         self.columnconfigure(0, weight=1); self.rowconfigure(5, weight=1)
-        self.section = 'Resumen'; self.page = 0; self.month = tk.StringVar(value='Todos')
+        self.section = 'Resumen'; self.wallet_view=None; self.page = 0; self.month = tk.StringVar(value='Todos')
         self.query = tk.StringVar(); self.scope = tk.StringVar(value='Todos'); self.selected_id = None
         ttk.Label(self, text='Finanzas', font=('Segoe UI',25,'bold')).grid(row=0, column=0, sticky='w')
         self.subtitle = ttk.Label(self, foreground=MUTED)
@@ -29,7 +32,7 @@ class FinanceView(ttk.Frame):
         self.metric_frame.grid(row=2, column=0, sticky='ew', pady=(0,8))
         self.metric_frame.bind('<Configure>', lambda e:self.draw_metrics())
         tabs = WrapBar(self); self.tab_bar=tabs; tabs.grid(row=3,column=0,sticky='ew',pady=(0,5)); self.tabs={}
-        for label in ['Resumen','Movimientos','Por persona','Insights mensuales']:
+        for label in ['Resumen','Movimientos','Por persona','Insights mensuales']+(['Billeteras'] if app.store.project_id=='main' and not self.personal else []):
             if self.personal and label=='Por persona':continue
             self.tabs[label] = tabs.add(ttk.Button(tabs,text=label,command=lambda v=label:self.show(v)))
         tools = WrapBar(self); self.tools=tools; tools.grid(row=4,column=0,sticky='ew',pady=(0,7))
@@ -90,12 +93,25 @@ class FinanceView(ttk.Frame):
         self.rows=self.ledger.rows();self.balance=totals(self.rows);self.claims=outstanding(self.rows)
         months=sorted({d['date'][:7] for d in self.rows}|{d['period'] for d in self.rows if d['kind']=='Insight'},reverse=True)
         self.month_box.configure(values=['Todos']+months)
-        for key,button in self.tabs.items():button.configure(style='Active.Tab.TButton' if key==self.section else 'Tab.TButton',padding=(8,6))
+        for key,button in self.tabs.items():button.configure(style='Finance.Active.Tab.TButton' if key==self.section else 'Finance.Tab.TButton',padding=(8,6))
         prev=(dt.date.today().replace(day=1)-dt.timedelta(days=1)).strftime('%Y-%m')
         missing=[p for p in self.ledger.platforms() if not any(d['kind']=='Insight' and d['period']==prev and d['platform']==p and not d['void'] for d in self.rows)]
         self.subtitle.configure(text=('Insights '+prev+' pendientes: '+', '.join(missing)) if dt.date.today().day==1 and missing else ('USD · Tus gastos, ingresos e inversión personal' if self.personal else 'USD · Caja del negocio, separada de tu dinero personal'))
         self.filtered=[d for d in self.rows if (self.month.get()=='Todos' or (d['period'] if d['kind']=='Insight' else d['date'][:7])==self.month.get())]
-        self.draw_metrics();self.draw_chart();self.render_table()
+        self.layout_section();self.draw_metrics();self.draw_chart();self.render_table()
+
+    def layout_section(self):
+        if self.composer and self.composer.winfo_ismapped():return
+        wallets=self.section=='Billeteras'
+        if wallets and self.wallet_view is None:
+            from .wallets_ui import WalletsView
+            self.wallet_view=WalletsView(self)
+        for widget in (self.body,self.bottom,self.metric_frame,self.tools):
+            widget.grid_remove() if wallets else widget.grid()
+        self.tab_bar.grid()
+        if self.wallet_view:
+            if wallets:self.wallet_view.grid(row=5,column=0,rowspan=2,sticky='nsew');self.wallet_view.refresh()
+            else:self.wallet_view.grid_remove()
 
     @themed_drawing
     def draw_metrics(self):
@@ -335,6 +351,7 @@ class FinanceView(ttk.Frame):
     def capture(self,hint=None):
         if self.app.busy or self.app.recording:return
         self.app.hide_capture()
+        if self.wallet_view:self.wallet_view.grid_remove()
         if self.composer is None:
             from .finance_capture import FinanceCapture
             self.composer=FinanceCapture(self)
@@ -347,7 +364,7 @@ class FinanceView(ttk.Frame):
             if self.app.busy or self.app.recording:
                 self.composer.status.configure(text='Terminá la grabación o el procesamiento antes de volver.');return False
             self.composer.grid_remove()
-        self.body.grid();self.bottom.grid();self.metric_frame.grid();self.tab_bar.grid();self.tools.grid();return True
+        self.layout_section();return True
 
     def reimburse_selected(self):
         selection=self.table.selection()

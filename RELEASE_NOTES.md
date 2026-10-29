@@ -1,6 +1,6 @@
-# Animation Lover 0.5.4
+# Animation Lover 0.5.5
 
-- Corregida la creación de tareas cuando la IA devuelve fechas con espacios, como `2 026-10-29`.
-- Se normalizan espacios y variantes de guiones sin inventar fechas ni cambiar su significado.
-- Si una fecha es inválida o las fechas se contradicen, se pide aclaración en español antes de guardar, conservando la entrada original.
-- Los errores de guardado dejan de mostrar el estado Procesando.
+- Finanzas de Animation Lover agrega Billeteras: una dirección USDT BEP20 / BSC por integrante.
+- Campos editables con Guardar y Copiar; los borradores se conservan para completar más adelante.
+- Carga inicial mediante archivo privado, sin publicar direcciones en GitHub ni reemplazar billeteras existentes por error.
+- Las billeteras se incluyen en los respaldos y conservan su asociación al renombrar al equipo.

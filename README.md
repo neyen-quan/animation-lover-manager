@@ -70,6 +70,10 @@ Más opciones ofrece categorías editables, desglose de gastos, historial, respa
 
 ## Proyectos
 
+Finanzas de Animation Lover incluye la pestaña Billeteras, con una dirección USDT BEP20 / BSC por integrante. Guardar valida el formato de dirección EVM (no comprueba titularidad ni red en blockchain). Copiar utiliza la dirección guardada; los cambios sin guardar quedan como borrador local. La agenda no envía pagos ni altera saldos. Las direcciones y borradores se conservan en la base del proyecto, se respaldan y acompañan los cambios de nombre del equipo. Los proyectos personales no muestran esta agenda.
+
+La carga inicial acepta un archivo privado `.almwallets`, JSON con `product: AnimationLoverWallets`, `schema: 1`, `project: main`, `network: USDT BEP20 / BSC` y `wallets` como diccionario de persona a dirección. Se revisan los datos antes de guardar; una importación no reemplaza una dirección distinta ya guardada. Nunca publicar estos archivos ni direcciones personales junto al código.
+
 Los proyectos aparecen arriba como botones, uno junto al otro. Un solo clic cambia al elegido; el activo queda resaltado y con relieve, y los demás atenuados. Los botones se acomodan al ancho disponible si se incorporan más proyectos. El proyecto personal usa una paleta verde, y Animation Lover su paleta azul/violeta. Animation Lover siempre es el proyecto de inicio y mantiene la base histórica en su ubicación original. Cada proyecto adicional guarda su base, adjuntos y comprobantes en `projects/<id>/`. Su equipo, tareas, papelera, historial, borradores, categorías, plataformas y contexto de IA son independientes. Ollama, canal de actualización y destino de respaldo se comparten desde el perfil principal.
 
 Los proyectos personales tienen una sola persona y asignan automáticamente las tareas. Se ocultan los controles de equipo y se muestran inversión pendiente de recuperar y balance acumulado. Créditos IA permite seleccionar proveedor y aclarar el nombre en Otras.

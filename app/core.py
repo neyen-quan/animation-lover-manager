@@ -85,6 +85,7 @@ class Store:
         used=self.db.execute('SELECT EXISTS(SELECT 1 FROM items) OR EXISTS(SELECT 1 FROM history)').fetchone()[0]
         has_finance=self.db.execute("SELECT 1 FROM sqlite_master WHERE name='finance'").fetchone()
         if has_finance:used=used or self.db.execute('SELECT EXISTS(SELECT 1 FROM finance)').fetchone()[0]
+        used=used or any(self.setting(key) for key in ('finance_wallets','finance_wallet_drafts'))
         if used and len(names)!=len(old):
             raise ValueError('Para conservar las asignaciones, mantené la cantidad de personas y reemplazá cada nombre en su misma línea.')
         mapping=dict(zip(old,names))
@@ -109,6 +110,10 @@ class Store:
                     for key in ('person','recipient'):data[key]=mapping.get(data.get(key,''),data.get(key,''))
                     data['revision']=data.get('revision',0)+1
                     self.db.execute('UPDATE finance SET data=? WHERE id=?',(json.dumps(data,ensure_ascii=False),id))
+            for key in ('finance_wallets','finance_wallet_drafts'):
+                wallets=self.setting(key)
+                if wallets is not None:
+                    self.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',(key,json.dumps({mapping.get(person,person):value for person,value in wallets.items()},ensure_ascii=False)))
             aliases={key:mapping.get(value,value) for key,value in (self.setting('aliases') or {}).items()}
             for key,value in [('people',names),('aliases',aliases)]:
                 self.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',(key,json.dumps(value,ensure_ascii=False)))
