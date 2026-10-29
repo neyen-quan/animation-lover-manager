@@ -101,12 +101,14 @@ class UpdateDialog(tk.Toplevel):
         if not messagebox.askyesno('Instalar actualización',f"Instalar {self.installed} → {m['to']}\n\nEl paquete ya está descargado y verificado. Se respaldarán los archivos reemplazados y se reiniciará el programa. Tus datos se conservan.\n\n¿Instalar ahora?",parent=self):return
         if not getattr(sys,'frozen',False):messagebox.showinfo('Desarrollo','La instalación se prueba desde el ejecutable de Windows.',parent=self);return
         if self.app and (self.app.busy or self.app.recording):messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de actualizar.',parent=self);return
-        self.store.backup()
+        if self.app:self.app.projects.backup_all()
+        else:self.store.backup()
         data=self.store.path.parent
         def done(base):
             if self.app:self.app.save_draft()
             if self.transition:self.store.setting('update_channel',u.CHANNEL)
-            self.store.db.close()
+            if self.app:self.app.projects.close()
+            else:self.store.db.close()
             (base/'go').write_text('go')
             self.master.destroy()
         self.task(lambda:u.prepare_job(path,self.root_path,self.installed,data,sha,m['to'],os.getpid()),done)

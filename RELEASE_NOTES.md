@@ -1,8 +1,10 @@
-# Animation Lover 0.4.1
+# Animation Lover 0.5.0
 
-- Reintegro rápido: doble clic en un gasto personal o una persona, importe pendiente calculado, comprobante opcional y confirmación de pago.
-- Los gastos muestran su saldo pendiente o que ya están reintegrados/compensados. Se contemplan pagos anteriores y traspasos personales sin duplicar gastos.
-- Registrar, Gasto, Retiro, Reintegro y Reparto abren la misma entrada dentro de Finanzas, con texto, audio y capturas.
-- La IA completa los datos y presenta un resumen para confirmar. Las aclaraciones se responden con un mensaje, sin llenar un formulario.
-- La carga guarda el lote completo junto con sus comprobantes; las modificaciones manuales siguen disponibles en Abrir / editar.
-- Se conservan los datos, comprobantes y el actualizador de GitHub.
+- Selector de proyecto arriba a la izquierda. El programa siempre inicia en Animation Lover.
+- Tareas, notas, historial, borradores, contexto de IA y finanzas independientes por proyecto.
+- Modo personal con asignación automática y controles de equipo simplificados.
+- Proveedores de Créditos IA y aclaración para Otras; plataformas y categorías propias de cada proyecto.
+- Configuración privada de proyectos con gastos iniciales, importable una sola vez desde Ajustes.
+- Modelo de Ollama, actualizador y carpeta de respaldo compartidos; copias independientes de todos los proyectos.
+- Se bloquea el cambio mientras se graba, procesa o está abierto un detalle para evitar guardar en el proyecto equivocado.
+- La base de Animation Lover conserva su ubicación, sus registros y comprobantes.

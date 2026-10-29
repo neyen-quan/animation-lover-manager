@@ -248,7 +248,9 @@ class TaskBoard(ttk.Frame):
         menu=tk.Menu(self,tearoff=False,bg=CARD,fg=FG,activebackground=HOVER,activeforeground=FG,font=('Segoe UI',10),bd=0)
         selected=next((d for d in self.items if d['id']==self.selected_id),{})
         delete_label='Restaurar tarjeta' if selected.get('deleted') else 'Eliminar tarjeta'
-        for label,action in [('Abrir tarjeta','open'),('Preparar mensaje','notify'),(delete_label,'delete')]:menu.add_command(label=label,command=lambda a=action:self.on_action(a))
+        for label,action in [('Abrir tarjeta','open'),('Preparar mensaje','notify'),(delete_label,'delete')]:
+            if action=='notify' and getattr(self,'personal',False):continue
+            menu.add_command(label=label,command=lambda a=action:self.on_action(a))
         try:menu.tk_popup(x,y)
         finally:menu.grab_release()
     def navigate(self,direction):

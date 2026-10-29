@@ -65,3 +65,17 @@ Los insights mensuales registran ingresos informados y suscriptores por platafor
 Para devolver un adelanto, hacer doble clic en el gasto personal o en la persona: se calcula el saldo pendiente, se puede adjuntar un comprobante y confirmar cuando el pago ya fue enviado. También existe el botón Reintegrar. Los pagos anteriores sin vínculo se aplican a los adelantos más antiguos; los nuevos pagos desde un gasto quedan vinculados a ese registro. Los traspasos entre integrantes compensan al receptor y generan un adelanto para el emisor. Abrir / editar conserva la corrección manual avanzada.
 
 Más opciones ofrece categorías editables, desglose de gastos, historial, respaldo e importación del punto de partida. El archivo privado `.almfinance` es un ZIP de datos (manifest `finance.json`, schema 1, product `AnimationLoverFinance`, entries con centavos y receipts por SHA-256). Solo se importa con el libro vacío, valida equipo, comprobantes y saldos, y muestra una confirmación del resumen antes de escribir. Nunca subir archivos de importación o comprobantes reales al repositorio público.
+
+## Proyectos
+
+El selector superior cambia de espacio. Animation Lover siempre es el proyecto de inicio y mantiene la base histórica en su ubicación original. Cada proyecto adicional guarda su base, adjuntos y comprobantes en `projects/<id>/`. Su equipo, tareas, papelera, historial, borradores, categorías, plataformas y contexto de IA son independientes. Ollama, canal de actualización y destino de respaldo se comparten desde el perfil principal.
+
+Los proyectos personales tienen una sola persona y asignan automáticamente las tareas. Se ocultan los controles de equipo y se muestran inversión pendiente de recuperar y balance acumulado. Créditos IA permite seleccionar proveedor y aclarar el nombre en Otras.
+
+Ajustes → Importar configuración de proyecto acepta un archivo privado `.almproject`, JSON de datos con `product: AnimationLoverProject`, `schema: 1`, descriptor personal y gastos iniciales en centavos. El dueño es la primera persona del perfil principal. Se valida el archivo y se muestra un resumen antes de importar. La escritura se prepara en una carpeta temporal y se publica junto al registro; repetir la importación no duplica ni reemplaza datos. No existe un formulario de creación libre.
+
+Al respaldar se incluyen todos los proyectos, cada uno por separado. Las copias históricas de Animation Lover siguen en el destino habitual. Los adicionales usan `Proyectos/<id>/` con la subcarpeta Finanzas para los ZIP de base y comprobantes. Para recuperar todo con la aplicación cerrada, restaurar la base principal que contiene el registro de proyectos y luego las bases/comprobantes de cada id a su carpeta `projects/<id>/`. Guardar primero una copia del perfil completo y no mezclar archivos WAL/SHM de otra copia.
+
+La IA recibe solo tarjetas o saldos del proyecto activo. Su descripción opcional se edita en Ajustes. Si identifica que la entrada se dirige a otro proyecto, pide cambiar la selección sin guardar cambios. El cambio de proyecto está bloqueado durante grabación, procesamiento o edición en ventanas abiertas. La actualización preserva y respalda todos los espacios.
+
+Nunca publicar archivos `.almproject`, `.almfinance`, bases ni comprobantes personales junto al código.

@@ -101,13 +101,18 @@ class WrapBar(ttk.Frame):
     """Flujo sin propagación de columnas: evita ciclos de negociación en Tk."""
     def __init__(self,parent,**kw):
         super().__init__(parent,height=42,**kw)
-        self.children_list=[];self.inset=0;self.bind('<Configure>',self.reflow)
+        self.children_list=[];self.hidden=set();self.inset=0;self.bind('<Configure>',self.reflow)
     def add(self,widget):
         self.children_list.append(widget);self.after_idle(self.reflow);return widget
+    def set_visible(self,widget,visible):
+        if visible:self.hidden.discard(widget)
+        else:self.hidden.add(widget);widget.place_forget()
+        self.reflow()
     def reflow(self,event=None):
         if not self.winfo_exists():return
         width=max(1,self.winfo_width()-self.inset);x=self.inset;y=3+self.inset;line_height=0
         for w in self.children_list:
+            if w in self.hidden:continue
             needed=min(w.winfo_reqwidth(),width);height=w.winfo_reqheight()
             if x>self.inset and x+needed>width:y+=line_height+6;x=self.inset;line_height=0
             info=w.place_info()

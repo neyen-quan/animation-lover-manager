@@ -25,7 +25,7 @@ class FinanceCapture(ttk.Frame):
         self.box=tk.Text(self,height=4,wrap='word',bg=SURFACE,fg=FG,insertbackground=FG,
                          relief='flat',highlightthickness=1,highlightbackground=LINE,padx=12,pady=10,font=('Segoe UI',11))
         self.box.grid(row=1,column=0,sticky='nsew')
-        self.box.insert('1.0',self.app.store.setting('finance_draft') or '')
+        self.box.insert('1.0',self.ledger.store.setting('finance_draft') or '')
         self.box.bind('<<Modified>>',self.changed);self.hint.trace_add('write',self.invalidate)
         self.preview=tk.Text(self,height=4,wrap='word',bg=SURFACE,fg=FG,relief='flat',padx=12,pady=10,font=('Segoe UI',11))
         self.preview.tag_configure('title',font=('Segoe UI',12,'bold'),foreground='#b5bfff')
@@ -53,7 +53,7 @@ class FinanceCapture(ttk.Frame):
 
     def changed(self,event=None):
         if self.box.edit_modified():
-            self.app.store.setting('finance_draft',self.box.get('1.0','end').strip())
+            self.ledger.store.setting('finance_draft',self.box.get('1.0','end').strip())
             self.box.edit_modified(False)
             self.invalidate()
 
@@ -120,20 +120,23 @@ class FinanceCapture(ttk.Frame):
         text=self.box.get('1.0','end').strip();paths=list(self.paths)
         if not text and not paths:return
         hint=None if self.hint.get()=='Automático' else self.hint.get()
-        people=list(self.ledger.people());categories=list(self.ledger.categories());aliases=self.app.store.setting('aliases') or {}
-        balances=totals(self.ledger.rows())['debt'];model=self.app.store.setting('model')
+        people=list(self.ledger.people());categories=list(self.ledger.categories());aliases=self.ledger.store.setting('aliases') or {}
+        balances=totals(self.ledger.rows())['debt'];model=self.ledger.store.setting('model')
+        project=self.app.projects.context(self.app.project_id);providers=self.ledger.providers();personal=bool(self.ledger.store.setting('personal'))
         self.status.configure(text='Interpretando… Voy a completar los datos con tu mensaje y los comprobantes.')
         snapshot=(text,paths,self.hint.get())
         def done(result):
             if snapshot!=(self.box.get('1.0','end').strip(),self.paths,self.hint.get()):
                 self.status.configure(text='La entrada cambió durante la interpretación. Volvé a interpretar.');return
-            rows,questions=proposals(result,people,categories,hint=hint,aliases=aliases)
+            if result.get('project_mismatch'):
+                self.status.configure(text='Esta entrada corresponde a otro proyecto. Cambialo en el desplegable antes de registrar.');return
+            rows,questions=proposals(result,people,categories,hint=hint,aliases=aliases,personal=personal,providers=providers,platforms=self.ledger.platforms())
             if questions:
                 self.status.configure(text='Necesito aclarar: '+' · '.join(questions)+' Agregá la respuesta al mensaje.');return
             # Validate before showing the confirmation, so an incomplete AI reply
             # leads to a plain-language clarification instead of a blank form.
             try:
-                rows=[validate(d,people,categories) for d in rows]
+                rows=[validate(d,people,categories,**self.ledger.validation_options()) for d in rows]
             except (ValueError,KeyError) as e:
                 self.status.configure(text='Falta aclarar un dato: '+str(e)+' Agregalo al mensaje y volvé a interpretar.');return
             self.pending=rows;self.snapshot=snapshot
@@ -142,14 +145,14 @@ class FinanceCapture(ttk.Frame):
                 self.preview.insert('end',d['kind']+' · '+usd(d['amount'])+'\n','title')
                 self.preview.insert('end',d['description']+'\n')
                 details=[d['date'],d['person'] or d['platform']]
-                if d['kind']=='Gasto':details.extend([d['funding'],d['category']])
+                if d['kind']=='Gasto':details.extend([d['funding'],d['category'],d.get('provider_other') if d.get('provider')=='Otras' else d.get('provider','')])
                 if d['kind']=='Retiro':details.extend(['Bruto '+usd(d['gross']),'Comisión '+usd(d['fee']),'Recibido' if d['received'] else 'En tránsito · incluido en caja' if d['include_pending'] else 'Pendiente de ingreso'])
                 if d['kind']=='Insight':details.append('Mes '+d['period'])
                 self.preview.insert('end',' · '.join(x for x in details if x)+'\n\n','muted')
             self.preview.configure(state='disabled');self.box.grid_remove();self.preview.grid(row=1,column=0,sticky='nsew')
             self.status.configure(text='Datos completados. Revisá el resumen y confirmá; para cambiar algo, usá Corregir con mensaje.')
             self.save_button.configure(state='normal')
-        self.app.run(lambda:extract(text,paths,model,people,categories,hint=hint,aliases=aliases,balances=balances),done,on_error=self.failed)
+        self.app.run(lambda:extract(text,paths,model,people,categories,hint=hint,aliases=aliases,balances=balances,project=project,providers=providers),done,on_error=self.failed)
 
     def commit(self):
         if self.app.busy or self.app.recording or not self.pending:return

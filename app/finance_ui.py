@@ -17,7 +17,7 @@ from .windowing import place_window
 class FinanceView(ttk.Frame):
     def __init__(self, app):
         super().__init__(app, padding=(22,16,24,12))
-        self.app = app; self.ledger = Finance(app.store)
+        self.app = app; self.ledger = Finance(app.store);self.personal=bool(app.store.setting('personal'))
         self.columnconfigure(0, weight=1); self.rowconfigure(5, weight=1)
         self.section = 'Resumen'; self.page = 0; self.month = tk.StringVar(value='Todos')
         self.query = tk.StringVar(); self.scope = tk.StringVar(value='Todos'); self.selected_id = None
@@ -29,6 +29,7 @@ class FinanceView(ttk.Frame):
         self.metric_frame.bind('<Configure>', lambda e:self.draw_metrics())
         tabs = WrapBar(self); self.tab_bar=tabs; tabs.grid(row=3,column=0,sticky='ew',pady=(0,5)); self.tabs={}
         for label in ['Resumen','Movimientos','Por persona','Insights mensuales']:
+            if self.personal and label=='Por persona':continue
             self.tabs[label] = tabs.add(ttk.Button(tabs,text=label,command=lambda v=label:self.show(v)))
         tools = WrapBar(self); self.tools=tools; tools.grid(row=4,column=0,sticky='ew',pady=(0,7))
         for label, command in [('+ Registrar', self.capture), ('+ Gasto', lambda:self.capture('Gasto')),
@@ -90,28 +91,28 @@ class FinanceView(ttk.Frame):
         self.month_box.configure(values=['Todos']+months)
         for key,button in self.tabs.items():button.configure(style='Active.Tab.TButton' if key==self.section else 'Tab.TButton',padding=(8,6))
         prev=(dt.date.today().replace(day=1)-dt.timedelta(days=1)).strftime('%Y-%m')
-        missing=[p for p in PLATFORMS if not any(d['kind']=='Insight' and d['period']==prev and d['platform']==p and not d['void'] for d in self.rows)]
-        self.subtitle.configure(text=('Insights '+prev+' pendientes: '+', '.join(missing)) if dt.date.today().day==1 and missing else 'USD · Caja del negocio, separada de tu dinero personal')
+        missing=[p for p in self.ledger.platforms() if not any(d['kind']=='Insight' and d['period']==prev and d['platform']==p and not d['void'] for d in self.rows)]
+        self.subtitle.configure(text=('Insights '+prev+' pendientes: '+', '.join(missing)) if dt.date.today().day==1 and missing else ('USD · Tus gastos, ingresos e inversión personal' if self.personal else 'USD · Caja del negocio, separada de tu dinero personal'))
         self.filtered=[d for d in self.rows if (self.month.get()=='Todos' or (d['period'] if d['kind']=='Insight' else d['date'][:7])==self.month.get())]
         self.draw_metrics();self.draw_chart();self.render_table()
 
     def draw_metrics(self):
         if not hasattr(self,'balance'):return
         c=self.metric_frame;c.delete('all');w=max(1,c.winfo_width());t=self.balance
-        metrics=[('CAJA DISPONIBLE',t['cash'],'#aab8ff'),('POR REINTEGRAR',t['debt_total'],'#fdc56f'),('LIBRE TRAS REINTEGROS',t['free'],'#75ddc3')]
+        metrics=[('CAJA DISPONIBLE',t['cash'],'#aab8ff'),('POR RECUPERAR' if self.personal else 'POR REINTEGRAR',t['debt_total'],'#fdc56f'),('BALANCE ACUMULADO' if self.personal else 'LIBRE TRAS REINTEGROS',t['free'],'#75ddc3')]
         for i,(label,n,color) in enumerate(metrics):
             x=i*w/3+2;r=(i+1)*w/3-8
             c.create_rectangle(x,1,r,82,fill='#232c43',outline='#46516e');c.create_line(x+12,3,r-12,3,fill=color,width=2)
             c.create_text(x+12,18,text=label,anchor='w',fill=color,font=('Segoe UI',-10,'bold'))
             c.create_text(x+12,43,text=usd(n),anchor='w',fill=FG,font=('Segoe UI',-22,'bold'))
-            detail=('Incluye en tránsito: '+usd(t['anticipated'])) if i==0 else ('Deudas con el equipo' if i==1 else 'Saldo global, sin filtro mensual')
+            detail=('Incluye en tránsito: '+usd(t['anticipated'])) if i==0 else (('Dinero propio invertido' if self.personal else 'Deudas con el equipo') if i==1 else 'Saldo global, sin filtro mensual')
             c.create_text(x+12,66,text=detail,anchor='w',fill=MUTED,font=('Segoe UI',-10))
 
     def draw_chart(self):
         if not hasattr(self,'filtered'):return
         c=self.chart;c.delete('all');w=max(100,c.winfo_width());t=totals(self.filtered)
         if self.section=='Insights mensuales':
-            data=[(p,sum(d['amount'] for d in self.filtered if d['kind']=='Insight' and not d['void'] and d['platform']==p)) for p in PLATFORMS]
+            data=[(p,sum(d['amount'] for d in self.filtered if d['kind']=='Insight' and not d['void'] and d['platform']==p)) for p in self.ledger.platforms()]
             title='Ingresos informados · Insights no modifican la caja'
         elif self.section=='Por persona':
             data=[(p,self.balance['debt'].get(p,0)) for p in self.ledger.people()];title='Pendiente de devolver · Saldo global'
@@ -176,12 +177,13 @@ class FinanceView(ttk.Frame):
         body=ttk.Frame(w,padding=22);body.pack(fill='both',expand=True)
         def do(fn):w.destroy();fn()
         for label,fn in [('Cargar insights mensuales',lambda:self.capture('Insight')),('Importar punto de partida',self.import_start),('Categorías de gastos',self.categories),('Gastos por categoría',self.category_report),('Historial de cambios',self.history),('Pago entre integrantes',lambda:self.edit(entry('Traspaso personal'))),('Respaldar ahora',self.backup)]:
+            if self.personal and label=='Pago entre integrantes':continue
             ttk.Button(body,text=label,command=lambda f=fn:do(f)).pack(fill='x',pady=4)
         place_window(w,500,460,parent=self.app)
 
     def backup(self):
         try:
-            p=self.app.store.backup();messagebox.showinfo('Respaldo completo','Se guardó la base y los comprobantes de Finanzas.\n'+str(p.parent),parent=self.app)
+            p=self.ledger.store.backup();messagebox.showinfo('Respaldo completo','Se guardó la base y los comprobantes de Finanzas.\n'+str(p.parent),parent=self.app)
         except Exception as e:messagebox.showerror('No se pudo respaldar',str(e),parent=self.app)
 
     def categories(self):
@@ -238,7 +240,7 @@ class FinanceView(ttk.Frame):
             fields[key]=tk.StringVar(value=value)
             widget=ttk.Combobox(f,textvariable=fields[key],values=values,state='readonly') if values else ttk.Entry(f,textvariable=fields[key])
             widget.grid(row=0,column=1,sticky='ew');widgets[key]=widget
-        for key,label,values in [('kind','Tipo',KINDS),('date','Fecha · AAAA-MM-DD',None),('description','Concepto',None),('platform','Plataforma',PLATFORMS),('person','Persona',self.ledger.people()),('recipient','Recibió de esa persona',self.ledger.people()),('funding','Pagado con',['Caja','Bolsillo personal']),('category','Categoría',self.ledger.categories()),('gross','Bruto USD',None),('fee','Comisión USD',None),('amount','Importe / neto USD',None),('period','Mes · AAAA-MM',None),('subscribers','Suscriptores (opcional)',None),('reference','Referencia (opcional)',None)]:field(key,label,values)
+        for key,label,values in [('kind','Tipo',KINDS),('date','Fecha · AAAA-MM-DD',None),('description','Concepto',None),('platform','Plataforma',self.ledger.platforms()),('person','Persona',self.ledger.people()),('recipient','Recibió de esa persona',self.ledger.people()),('funding','Pagado con',['Caja','Bolsillo personal']),('category','Categoría',self.ledger.categories()),('provider','IA / proveedor',self.ledger.providers() or None),('provider_other','Otra IA · aclarar',None),('gross','Bruto USD',None),('fee','Comisión USD',None),('amount','Importe / neto USD',None),('period','Mes · AAAA-MM',None),('subscribers','Suscriptores (opcional)',None),('reference','Referencia (opcional)',None)]:field(key,label,values)
         received=tk.BooleanVar(value=d['received']);include=tk.BooleanVar(value=d['include_pending'])
         states=ttk.Frame(body);states.pack(fill='x',pady=8)
         ttk.Checkbutton(states,text='Ya llegó a mi cuenta',variable=received).pack(anchor='w')
@@ -260,9 +262,15 @@ class FinanceView(ttk.Frame):
             kind=fields['kind'].get()
             shown={'kind','date','description','amount','reference'}
             if kind=='Retiro':shown|={'platform','gross','fee'}
-            if kind=='Gasto':shown|={'person','funding','category'}
+            if kind=='Gasto':
+                shown|={'person','funding','category'}
+                if self.ledger.providers() and fields['category'].get()=='Créditos IA':
+                    shown.add('provider')
+                    if fields['provider'].get()=='Otras':shown.add('provider_other')
+            if self.personal:shown.discard('person')
             if kind in ('Reintegro','Reparto','Traspaso personal'):shown|={'person'}
             if kind=='Traspaso personal':shown|={'recipient'}
+            if self.personal:shown.discard('person')
             if kind=='Insight':shown|={'platform','period','subscribers'}
             for key,frame in frames.items():
                 if key in shown:frame.pack(fill='x',pady=4,before=states)
@@ -271,10 +279,11 @@ class FinanceView(ttk.Frame):
             for child in states.winfo_children():
                 if kind=='Retiro':child.pack(anchor='w')
                 else:child.pack_forget()
-        fields['kind'].trace_add('write',visible);visible()
+        fields['kind'].trace_add('write',visible);fields['category'].trace_add('write',visible);fields['provider'].trace_add('write',visible);visible()
         def save():
             try:
                 n=copy.deepcopy(d);n.update({k:v.get().strip() for k,v in fields.items() if k not in ('amount','gross','fee','subscribers')})
+                if self.personal:n['person']=self.ledger.people()[0]
                 n['amount']=cents(fields['amount'].get());n['gross']=cents(fields['gross'].get()) if n['kind']=='Retiro' else 0;n['fee']=cents(fields['fee'].get()) if n['kind']=='Retiro' else 0
                 n['subscribers']=int(fields['subscribers'].get()) if n['kind']=='Insight' and fields['subscribers'].get().strip() else None
                 n.update(received=received.get(),include_pending=include.get(),notes=notes.get('1.0','end').strip())

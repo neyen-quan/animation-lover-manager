@@ -6,6 +6,7 @@ from app import __version__
 from app.updater import EXE,HELPER,PRODUCT,atomic_json,digest,prepare_job
 from app.core import Store,fresh,PEOPLE
 from app.finance import Finance,entry as finance_entry,totals
+from app.projects import Projects
 
 def stop_child(root,pid=None):
     if pid:
@@ -43,7 +44,13 @@ def main():
         store=Store();card=fresh('Prueba de conservación');store.apply([card]);store.setting('model','modelo-de-prueba');store.setting('draft','borrador conservado');db=store.path
         finance=Finance(store);proof=base/'proof.txt';proof.write_text('Synthetic finance receipt')
         expense=finance_entry('Gasto');expense.update(description='Synthetic expense',person=PEOPLE[0],funding='Bolsillo personal',amount=1250,attachments=[finance.attachment(proof)])
-        finance.save([expense]);store.db.close()
+        finance.save([expense])
+        projects=Projects(store)
+        config=dict(product='AnimationLoverProject',schema=1,project=dict(id='update-personal',name='Personal update test',personal=True),expenses=[dict(description='Synthetic personal subscription',cents=1700,category='Suscripciones')])
+        config_path=base/'synthetic.almproject';config_path.write_text(json.dumps(config))
+        projects.import_project(projects.preview_import(config_path));personal=projects.open('update-personal')
+        personal_card=fresh('Independent personal task',author=personal.people()[0]);personal.apply([personal_card]);personal.setting('draft','personal draft')
+        projects.close()
         before=digest(db)
         # Copia independiente del helper para simular la llamada de la aplicación.
         import app.updater as updater
@@ -57,7 +64,12 @@ def main():
                 time.sleep(.3)
             result=json.loads((jobdir/'result.json').read_text());assert result['success'],result
             assert (jobdir/'healthy.json').exists()
-            check=Store(db);assert check.get(card['id'])['title']==card['title'];assert check.setting('model')=='modelo-de-prueba';assert check.setting('draft')=='borrador conservado';f=Finance(check);assert totals(f.rows())['debt_total']==1250;assert (f.media/expense['attachments'][0]['file']).read_text()=='Synthetic finance receipt';check.db.close()
+            check=Store(db);assert check.get(card['id'])['title']==card['title'];assert check.setting('model')=='modelo-de-prueba';assert check.setting('draft')=='borrador conservado';f=Finance(check);assert totals(f.rows())['debt_total']==1250;assert (f.media/expense['attachments'][0]['file']).read_text()=='Synthetic finance receipt';registry=Projects(check);personal=registry.open('update-personal')
+            assert personal.get(personal_card['id'])['title']=='Independent personal task'
+            assert personal.setting('draft')=='personal draft'
+            assert totals(Finance(personal).rows())['debt_total']==1700
+            assert check.get(personal_card['id']) is None
+            registry.close()
             assert json.loads((root/'installation.json').read_text())['version']==__version__
             assert (jobdir/'backup'/EXE).exists()
             print('Actualización con helper real, reinicio confirmado y datos conservados.')

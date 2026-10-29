@@ -32,9 +32,9 @@ def entry(kind='Gasto'):
                 description='', person='', recipient='', platform='', category='Otros',
                 funding='Caja', amount=0, fee=0, gross=0, received=False,
                 include_pending=False, reference='', notes='', attachments=[], void=False,
-                period=dt.date.today().strftime('%Y-%m'), subscribers=None, revision=0, source_id='')
+                period=dt.date.today().strftime('%Y-%m'), subscribers=None, revision=0, source_id='', provider='', provider_other='')
 
-def validate(data, people, categories):
+def validate(data, people, categories, *, providers=None, require_provider=False, platforms=None):
     d = copy.deepcopy(data)
     if d.get('kind') not in KINDS: raise ValueError('Tipo de movimiento inválido.')
     if not re.fullmatch(r'[a-zA-Z0-9_-]{1,80}', d.get('id', '')): raise ValueError('Identificador inválido.')
@@ -45,7 +45,7 @@ def validate(data, people, categories):
             raise ValueError('Importes inválidos. Usá montos positivos en USD.')
     for key in ('received', 'include_pending', 'void'):
         if type(d.get(key)) is not bool: raise ValueError('Estado inválido.')
-    if d['kind'] in ('Retiro', 'Insight') and d.get('platform') not in PLATFORMS:
+    if d['kind'] in ('Retiro', 'Insight') and d.get('platform') not in (platforms or PLATFORMS):
         raise ValueError('Seleccioná Fanvue o Patreon.')
     if d['kind'] == 'Retiro' and d['gross'] - d['fee'] != d['amount']:
         raise ValueError('El bruto menos la comisión debe coincidir con el neto.')
@@ -54,6 +54,9 @@ def validate(data, people, categories):
     if d['kind'] == 'Gasto':
         if d.get('funding') not in ('Caja', 'Bolsillo personal'): raise ValueError('Indicá quién financió el gasto.')
         if d.get('category') not in categories: raise ValueError('Seleccioná una categoría válida.')
+        if require_provider and d['category']=='Créditos IA':
+            if d.get('provider') not in (providers or []):raise ValueError('Indicá qué IA corresponde a los créditos.')
+            if d['provider']=='Otras' and not str(d.get('provider_other','')).strip():raise ValueError('Aclarame cuál es la otra IA.')
     if d['kind'] == 'Traspaso personal':
         if d.get('recipient') not in people or d['recipient'] == d['person']:
             raise ValueError('Indicá quién recibió el pago personal, distinto del emisor.')
@@ -138,10 +141,12 @@ class Finance:
         self.backup_warning = ''
 
     def people(self):
-        from .core import PEOPLE
-        return self.store.setting('people') or PEOPLE
+        return self.store.people()
 
     def categories(self): return self.store.setting('finance_categories') or list(CATEGORIES)
+    def platforms(self):return self.store.setting('finance_platforms') or list(PLATFORMS)
+    def providers(self):return self.store.setting('finance_providers') or []
+    def validation_options(self):return dict(providers=self.providers(),require_provider=bool(self.store.setting('require_provider')),platforms=self.platforms())
     def rows(self): return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM finance')]
     def get(self, id): return next((d for d in self.rows() if d['id'] == id), None)
 
@@ -164,7 +169,7 @@ class Finance:
                  (d['date'], d['kind'], d['amount'], d['person'], d['platform'], d['description'].casefold()))]
 
     def save(self, changes):
-        checked = [validate(d, self.people(), self.categories()) for d in changes]
+        checked = [validate(d, self.people(), self.categories(),**self.validation_options()) for d in changes]
         if len({d['id'] for d in checked}) != len(checked): raise ValueError('Movimiento repetido en el lote.')
         old = {d['id']: self.get(d['id']) for d in checked}
         for d in checked:
@@ -251,7 +256,7 @@ class Finance:
             if len(z.namelist()) != len(set(z.namelist())): raise ValueError('Archivo con entradas duplicadas.')
             manifest = json.loads(z.read('finance.json'))
             if manifest.get('product') != 'AnimationLoverFinance' or manifest.get('schema') != 1: raise ValueError('Formato de importación incorrecto.')
-            rows = [validate(d, self.people(), self.categories()) for d in manifest['entries']]
+            rows = [validate(d, self.people(), self.categories(),**self.validation_options()) for d in manifest['entries']]
             for d in rows:
                 for a in d['attachments']:
                     raw = z.read('receipts/' + a['file'])

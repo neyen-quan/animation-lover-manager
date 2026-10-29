@@ -10,6 +10,7 @@ from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, SHELL, apply_them
 from .widgets import ScrollArea, WrapBar, NavItem
 from .board import TaskBoard
 from .windowing import place_window
+from .projects import Projects
 
 class App(tk.Tk):
     def __init__(self):
@@ -19,13 +20,17 @@ class App(tk.Tk):
         import sys
         icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets/icon.png'
         if icon.exists():self._icon=tk.PhotoImage(file=icon);self.iconphoto(True,self._icon)
-        self.store=Store(); PEOPLE[:]=self.store.setting('people') or PEOPLE; ALIASES.update(self.store.setting('aliases') or {})
+        self.root_store=Store();self.projects=Projects(self.root_store);self.project_id='main';self.store=self.root_store
+        self.project_states={};self.finance_views={};self._switching_project=False
+        PEOPLE[:]=self.store.people();ALIASES.clear();ALIASES.update(self.store.setting('aliases') or {})
         self.jobs=queue.Queue();self.files=[];self.tempfiles=[];self.recording=None;self.busy=False
         self.protocol('WM_DELETE_WINDOW',self.close)
         self.view=tk.StringVar(value='Hoy');self.author=tk.StringVar(value=PEOPLE[0]);self.filter_person=tk.StringVar(value='Todos');self.keep=tk.BooleanVar();self.search=tk.StringVar()
         self.columnconfigure(1,weight=1);self.rowconfigure(1,weight=1)
         header=ttk.Frame(self,padding=(20,12),style='Shell.TFrame');header.grid(row=0,column=0,columnspan=2,sticky='ew');header.columnconfigure(0,weight=1)
-        ttk.Label(header,text='Animation Lover',style='Shell.TLabel',font=('Segoe UI',14,'bold')).grid(row=0,column=0,sticky='w')
+        self.project_name=tk.StringVar(value='Animation Lover')
+        self.project_selector=ttk.Combobox(header,textvariable=self.project_name,values=[p['name'] for p in self.projects.list()],state='readonly',width=23,font=('Segoe UI',-18,'bold'))
+        self.project_selector.grid(row=0,column=0,sticky='w',padx=(0,10));self.project_selector.bind('<<ComboboxSelected>>',self.select_project)
         self.capture_button=ttk.Button(header,text='+ Soltar idea',command=self.toggle_capture);self.capture_button.grid(row=0,column=1,padx=5)
         self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=2,padx=5)
         ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=3,padx=(5,0))
@@ -40,7 +45,7 @@ class App(tk.Tk):
             button=NavItem(nav,text=label,key=v,command=lambda x=v:self.change_view(x));button.pack(fill='x',pady=2);self.nav_buttons[v]=button
         ttk.Separator(nav).pack(fill='x',pady=12)
         self.finance_button=NavItem(nav,text='Finanzas',key='Finanzas',command=self.finance);self.finance_button.pack(fill='x');self.finance_view=None
-        ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8)).pack(anchor='w',padx=10,pady=12)
+        self.project_caption=ttk.Label(nav,text='Animation Lover  '+__version__,foreground=MUTED,font=('Segoe UI',8),wraplength=150);self.project_caption.pack(anchor='w',padx=10,pady=12)
         content=ttk.Frame(self,padding=(22,16,24,12));content.grid(row=1,column=1,sticky='nsew');self.content=content
         content.columnconfigure(0,weight=1);content.rowconfigure(5,weight=1)
         self.page_title=ttk.Label(content,text='Mi día',font=('Segoe UI',25,'bold'));self.page_title.grid(row=0,column=0,sticky='w')
@@ -56,12 +61,12 @@ class App(tk.Tk):
         tabs=WrapBar(content);tabs.grid(row=3,column=0,sticky='ew',pady=(0,8));self.layout_buttons={}
         for mode,label in [('table','Tabla principal'),('cards','Tarjetas')]:self.layout_buttons[mode]=tabs.add(ttk.Button(tabs,text=label,style='Tab.TButton',command=lambda m=mode:self.set_layout(m)))
         filters=WrapBar(content,style='Toolbar.TFrame');filters.inset=5;filters.grid(row=4,column=0,sticky='ew',pady=(0,12))
-        filters.add(ttk.Button(filters,text='+ Nueva tarjeta',style='Accent.TButton',command=lambda:self.editor(fresh())))
+        filters.add(ttk.Button(filters,text='+ Nueva tarjeta',style='Accent.TButton',command=lambda:self.editor(self.new_item())))
         filters.add(ttk.Label(filters,text='Buscar',style='Toolbar.TLabel'))
         filters.add(ttk.Entry(filters,textvariable=self.search,width=18))
         box=filters.add(ttk.Combobox(filters,textvariable=self.filter_person,values=['Todos']+PEOPLE,state='readonly',width=12));box.bind('<<ComboboxSelected>>',lambda e:self.refresh());self.people_filter=box
-        filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
-        self.board=TaskBoard(content,self.open_selected,lambda:self.editor(fresh()),self.board_action);self.board.grid(row=5,column=0,sticky='nsew')
+        self.task_filters=filters;self.meeting_button=filters.add(ttk.Button(filters,text='Reunión semanal',command=self.meeting))
+        self.board=TaskBoard(content,self.open_selected,lambda:self.editor(self.new_item()),self.board_action);self.board.grid(row=5,column=0,sticky='nsew')
         self.tree=self.board
         actions=WrapBar(content);actions.grid(row=6,column=0,sticky='ew',pady=(6,0));self.task_actions=actions
         for title,cmd in [('Abrir tarjeta',self.open_selected),('Preparar mensaje',self.notify),('Historial',self.history),('Deshacer',self.undo)]:actions.add(ttk.Button(actions,text=title,command=cmd))
@@ -76,7 +81,7 @@ class App(tk.Tk):
         self.input=tk.Text(capture,height=4,bg=SURFACE,fg=FG,insertbackground=FG,relief='flat',highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT,font=('Segoe UI',11),wrap='word',padx=14,pady=12)
         self.input.grid(row=2,column=0,sticky='nsew')
         toolbar=WrapBar(capture);toolbar.grid(row=3,column=0,sticky='ew',pady=7)
-        toolbar.add(ttk.Label(toolbar,text='Idea de'))
+        self.capture_toolbar=toolbar;self.author_label=toolbar.add(ttk.Label(toolbar,text='Idea de'))
         self.author_box=toolbar.add(ttk.Combobox(toolbar,textvariable=self.author,values=PEOPLE,state='readonly',width=12))
         toolbar.add(ttk.Checkbutton(toolbar,text='Conservar adjuntos',variable=self.keep))
         for title,cmd in [('Adjuntar',self.attach),('Pegar imagen',self.paste_image)]:toolbar.add(ttk.Button(toolbar,text=title,command=cmd))
@@ -90,7 +95,76 @@ class App(tk.Tk):
         self.input.insert('1.0',self.store.setting('draft') or '');self.input.bind('<<Modified>>',self.save_draft)
         self.search.trace_add('write',lambda *a:self.refresh())
         self.set_layout(self.store.setting('board_layout') or 'table');self.refresh();self._poll_job=self.after(100,self.poll);self._result_job=self.after(1500,self.show_update_result)
-        self.start_area=place_window(self)
+        self.configure_project_controls();self.start_area=place_window(self)
+    @property
+    def personal(self):return bool(self.store.setting('personal'))
+    def new_item(self):
+        d=fresh(author=PEOPLE[0])
+        if self.personal:d['owners']=[PEOPLE[0]]
+        return d
+    def configure_project_controls(self):
+        personal=self.personal
+        button=self.nav_buttons['Por persona']
+        if personal:button.pack_forget()
+        else:button.pack(fill='x',pady=2,before=self.nav_buttons['Recientes'])
+        self.task_filters.set_visible(self.people_filter,not personal)
+        self.task_filters.set_visible(self.meeting_button,not personal)
+        self.capture_toolbar.set_visible(self.author_label,not personal)
+        self.capture_toolbar.set_visible(self.author_box,not personal)
+        for child in self.task_actions.children_list:
+            if isinstance(child,ttk.Button) and str(child.cget('text'))=='Preparar mensaje':self.task_actions.set_visible(child,not personal)
+        self.board.personal=personal
+        name=self.projects.descriptor(self.project_id)['name']
+        self.project_caption.configure(text=name+'  '+__version__)
+        self.capture_window.title('Soltar idea · '+name)
+        self.title(name+' · Gestión · '+__version__)
+    def select_project(self,event=None):
+        p=next((p for p in self.projects.list() if p['name']==self.project_name.get()),None)
+        if p:self.switch_project(p['id'])
+    def switch_project(self,id):
+        previous=self.projects.descriptor(self.project_id)
+        if id==self.project_id:return True
+        if self.busy or self.recording:
+            self.project_name.set(previous['name']);messagebox.showinfo('Operación en curso','Terminá la grabación o el procesamiento antes de cambiar de proyecto.',parent=self);return False
+        visible=[w for w in self.winfo_children() if isinstance(w,tk.Toplevel) and w is not self.capture_window and w.state()!='withdrawn']
+        if visible:
+            self.project_name.set(previous['name']);messagebox.showinfo('Cerrar ventana','Cerrá el detalle o ajuste abierto antes de cambiar de proyecto.',parent=visible[0]);return False
+        try:target=self.projects.open(id)
+        except Exception as e:
+            self.project_name.set(previous['name']);messagebox.showerror('Proyecto',str(e),parent=self);return False
+        self.save_draft();self.hide_capture()
+        self.project_states[self.project_id]=dict(files=list(self.files),keep=self.keep.get(),author=self.author.get(),transcribed=set(getattr(self,'already_transcribed',set())))
+        if self.finance_view:self.finance_view.grid_remove()
+        self._switching_project=True
+        try:
+            self.project_id=id;self.store=target
+            PEOPLE[:]=target.people();ALIASES.clear();ALIASES.update(target.setting('aliases') or {})
+            state=self.project_states.get(id,{})
+            self.author.set(state.get('author',PEOPLE[0]));self.author_box.configure(values=PEOPLE)
+            self.files=list(state.get('files',[]));self.keep.set(state.get('keep',False));self.already_transcribed=set(state.get('transcribed',set()))
+            self.people_filter.configure(values=['Todos']+PEOPLE);self.filter_person.set('Todos')
+            self.input.delete('1.0','end');self.input.insert('1.0',target.setting('draft') or '');self.input.edit_modified(False)
+            self.finance_view=self.finance_views.get(id)
+            self.board.selected_id=None;self.board.page=0;self.board.collapsed.clear();self.search.set('')
+            self.set_layout(target.setting('board_layout') or 'table');self.change_view('Hoy')
+            self.project_name.set(self.projects.descriptor(id)['name']);self.configure_project_controls()
+            self.status.configure(text='Proyecto: '+self.project_name.get()+' · Listo')
+        finally:self._switching_project=False
+        return True
+    def import_project(self,parent):
+        path=filedialog.askopenfilename(parent=parent,title='Configuración privada de proyecto',filetypes=[('Proyecto','*.almproject')])
+        if not path:return
+        try:
+            data=self.projects.preview_import(path)
+            from .finance import totals,usd
+            t=totals(data['entries'])
+            message=data['project']['name']+'\nProyecto personal · USD\nGastos iniciales: '+usd(t['expenses'])+'\nDinero propio por recuperar: '+usd(t['debt_total'])+'\n\n¿Cargar este proyecto?'
+            if not messagebox.askyesno('Revisar proyecto',message,parent=parent):return
+            self.projects.import_project(data)
+            self.project_selector.configure(values=[p['name'] for p in self.projects.list()])
+            messagebox.showinfo('Proyecto cargado','Ya podés seleccionarlo en el desplegable de arriba a la izquierda.'+('\n'+self.projects.backup_warning if self.projects.backup_warning else ''),parent=parent)
+        except Exception as e:messagebox.showerror('Importar proyecto',str(e),parent=parent)
+
     def toggle_capture(self):
         self.show_capture()
     def show_capture(self):
@@ -119,7 +193,7 @@ class App(tk.Tk):
         elif action=='notify':self.notify()
         elif action=='delete':self.delete()
     def show_update_result(self):
-        receipt=self.store.path.parent/'last-update.json'
+        receipt=self.root_store.path.parent/'last-update.json'
         if not receipt.exists():return
         try:
             result=json.loads(receipt.read_text());key=result.get('id') or str(receipt.stat().st_mtime_ns)
@@ -133,6 +207,7 @@ class App(tk.Tk):
         if not target:messagebox.showinfo('Elegí una tarjeta','Seleccioná la tarjeta que querés actualizar.',parent=self);return
         self.process(target)
     def save_draft(self,event=None):
+        if self._switching_project:return
         if self.input.edit_modified():
             self.store.setting('draft',self.input.get('1.0','end').strip())
             self.input.edit_modified(False)
@@ -147,7 +222,7 @@ class App(tk.Tk):
         if self.busy or self.recording:
             messagebox.showinfo('Operación en curso','Esperá a que termine el procesamiento o detené la grabación.',parent=self); return
         for p in self.tempfiles: Path(p).unlink(missing_ok=True)
-        self.store.db.close(); self.destroy()
+        self.projects.close(); self.destroy()
     def change_view(self,v):
         if self.finance_view:self.finance_view.grid_remove()
         self.content.grid();self.finance_button.set_active(False);self.view.set(v);self.refresh()
@@ -220,6 +295,7 @@ class App(tk.Tk):
         ttk.Label(body,text='Organización',font=('Segoe UI',13,'bold')).pack(anchor='w',pady=(24,12))
         props=ttk.Frame(body);props.pack(fill='x');props.columnconfigure(0,weight=1,uniform='field');props.columnconfigure(1,weight=1,uniform='field')
         for index,(key,label,values) in enumerate([('kind','Tipo',KINDS),('status','Estado',STATES),('author','Idea de',PEOPLE),('owners','Responsables · separados por coma',None),('priority','Prioridad',['Baja','Media','Alta','Máxima']),('planned','Fecha prevista · AAAA-MM-DD',None),('deadline','Fecha límite · AAAA-MM-DD o AAAA-MM',None)]):
+            if self.personal and key in ('author','owners'):continue
             field=ttk.Frame(props,padding=(0,0,12,12));field.grid(row=index//2,column=index%2,sticky='ew');field.columnconfigure(0,weight=1)
             ttk.Label(field,text=label,foreground=MUTED,wraplength=280).grid(row=0,column=0,sticky='w',pady=(0,6))
             var=tk.StringVar(value=', '.join(data[key]) if key=='owners' else data[key]);fields[key]=var
@@ -230,7 +306,7 @@ class App(tk.Tk):
         pending.insert('1.0','\n'.join(data.get('pending',[])));pending.pack(fill='x')
         if data.get('questions'):ttk.Label(body,text='Por aclarar: '+' / '.join(data['questions']),foreground='#fdab3d',wraplength=580).pack(fill='x',pady=15)
         def commit():
-            d=copy.deepcopy(data);d.update({k:v.get() for k,v in fields.items()});d['owners']=[p.strip() for p in d['owners'].split(',') if p.strip()];d['summary']=summary.get('1.0','end').strip();d['pending']=pending.get('1.0','end').strip().splitlines()
+            d=copy.deepcopy(data);d.update({k:v.get() for k,v in fields.items()});d['owners']=([PEOPLE[0]] if self.personal else [p.strip() for p in d['owners'].split(',') if p.strip()]);d['summary']=summary.get('1.0','end').strip();d['pending']=pending.get('1.0','end').strip().splitlines()
             try:self.store.apply([d]);self.refresh();window.destroy()
             except Exception as e:messagebox.showerror('Revisar tarjeta',str(e),parent=window)
         ttk.Button(footer,text='Guardar cambios',style='Accent.TButton',command=commit).pack(side='right')
@@ -240,6 +316,7 @@ class App(tk.Tk):
         if self.busy:return
         text=self.input.get('1.0','end').strip(); author=self.author.get(); items=self.store.items(); model=self.store.setting('model'); paths=list(self.files); keep=self.keep.get()
         if not text and not paths:return
+        project_context=self.projects.context(self.project_id)
         def work():
             combined=text; images=[]
             for path in paths:
@@ -249,9 +326,11 @@ class App(tk.Tk):
                     if str(p) not in getattr(self,'already_transcribed',set()):combined+='\n'+transcribe(p)
                 elif ext in ['.txt','.md','.csv']:combined+='\n'+p.read_text(encoding='utf-8')
                 else:raise ValueError(f'Formato aún no interpretable: {ext}. Pegá el texto o una captura.')
-            return interpret(combined,author,items,model,target,images)
+            return interpret(combined,author,items,model,target,images,project=project_context)
         def done(result):
             if not isinstance(result.get('creates',[]),list) or not isinstance(result.get('updates',[]),list):raise ValueError('Respuesta de IA inválida.')
+            if result.get('project_mismatch'):
+                self.show_capture();messagebox.showinfo('Revisar proyecto','La entrada parece corresponder a otro proyecto. Seleccionalo arriba antes de enviarla. No se guardaron cambios.',parent=self);return
             if result.get('questions'):
                 self.show_capture()
                 messagebox.showinfo('Necesito aclarar','\n'.join(result['questions'])+'\n\nAgregá tu respuesta a la entrada y volvé a interpretar.',parent=self);return
@@ -319,6 +398,7 @@ class App(tk.Tk):
         if any(d.get('recurrence')=='tuesday' and d['status']!='Terminado' for d in self.store.items()):messagebox.showinfo('Reunión','Ya hay una reunión pendiente.',parent=self);return
         date=today()+dt.timedelta(days=(1-today().weekday())%7); d=fresh('Reunión semanal');d.update(recurrence='tuesday',owners=[PEOPLE[0]],planned=date.isoformat(),deadline=date.isoformat());self.save([d])
     def notify(self):
+        if self.personal:return
         id=self.selected()
         if not id:return
         d=self.store.get(id);w=tk.Toplevel(self);w.withdraw();w.transient(self);w.title('Notificar · editar y copiar')
@@ -338,12 +418,13 @@ class App(tk.Tk):
         if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar los ajustes.',parent=self);return
         window=tk.Toplevel(self);window.withdraw();window.transient(self);window.title('Ajustes');window.minsize(480,360);window.configure(bg=BG)
         area=ScrollArea(window);area.pack(fill='both',expand=True);w=area.body
-        ttk.Label(w,text='Personas del equipo · una por línea').pack(pady=8)
+        ttk.Label(w,text='Tu nombre' if self.personal else 'Personas del equipo · una por línea').pack(pady=8)
         ttk.Label(w,text='Reemplazá cada nombre en su misma línea. Las tareas y el historial conservarán a la persona correspondiente.',wraplength=570,foreground=MUTED).pack(padx=12,pady=(0,8))
-        roster=tk.Text(w,height=5,bg=CARD,fg=FG,insertbackground=FG,font=('Segoe UI',11),padx=10,pady=8);roster.insert('1.0','\n'.join(PEOPLE));roster.pack(fill='x',padx=12)
+        roster=tk.Text(w,height=1 if self.personal else 5,bg=CARD,fg=FG,insertbackground=FG,font=('Segoe UI',11),padx=10,pady=8);roster.insert('1.0','\n'.join(PEOPLE));roster.pack(fill='x',padx=12)
         def save_people():
             names=[n.strip() for n in roster.get('1.0','end').splitlines() if n.strip()]
             if names==PEOPLE:return
+            if self.personal and len(names)!=1:messagebox.showinfo('Proyecto personal','Este proyecto tiene una sola persona.',parent=window);return
             if self.busy or self.recording:messagebox.showinfo('Esperá','Terminá el procesamiento o la grabación antes de cambiar el equipo.',parent=window);return
             if any(isinstance(child,tk.Toplevel) and child!=window and child.state()!='withdrawn' for child in self.winfo_children()):
                 messagebox.showinfo('Equipo','Cerrá las otras ventanas del programa antes de cambiar los nombres.',parent=window);return
@@ -372,19 +453,24 @@ class App(tk.Tk):
             try:
                 self.store.setting('backup_folder',path);created=self.store.backup()
             except Exception as error:
-                with self.store.db:
-                    if previous is None:self.store.db.execute("DELETE FROM settings WHERE key='backup_folder'")
-                    else:self.store.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',('backup_folder',json.dumps(previous)))
+                with self.root_store.db:
+                    if previous is None:self.root_store.db.execute("DELETE FROM settings WHERE key='backup_folder'")
+                    else:self.root_store.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',('backup_folder',json.dumps(previous)))
                 messagebox.showerror('Respaldo','No se pudo crear la copia. Se conserva la carpeta anterior.\n\n'+str(error),parent=window);return
             show_backup_folder();messagebox.showinfo('Respaldo creado','Se guardó una copia en:\n'+str(created)+'\n\nSi elegiste una carpeta sincronizada, Google Drive se encarga de subirla cuando esté activo y tenga conexión.',parent=window)
         ttk.Button(w,text='Carpeta de respaldo (puede ser Google Drive sincronizado)',command=backup_folder).pack(pady=12)
         backup_label.pack(padx=12);show_backup_folder()
-        ttk.Label(w,text='Se conservan las últimas 30 copias de la base de datos. Usá una carpeta exclusiva. Finanzas incluye sus comprobantes en la subcarpeta Finanzas; los adjuntos de tareas no se incluyen.',wraplength=570,foreground=MUTED).pack(padx=12,pady=8)
-        ttk.Label(w,text=f'Datos locales: {self.store.path}',wraplength=600).pack()
+        ttk.Label(w,text='Se conservan las últimas 30 copias de la base de datos. Usá una carpeta exclusiva. Los respaldos incluyen todos los proyectos y sus comprobantes financieros. Los proyectos adicionales se guardan en Proyectos; los adjuntos de tareas no se incluyen.',wraplength=570,foreground=MUTED).pack(padx=12,pady=8)
+        ttk.Label(w,text='Contexto de este proyecto para la IA (opcional)').pack(pady=(12,4))
+        context=tk.Text(w,height=4,wrap='word',bg=CARD,fg=FG,insertbackground=FG);context.insert('1.0',self.store.setting('project_context') or '');context.pack(fill='x',padx=12)
+        ttk.Button(w,text='Guardar contexto',command=lambda:self.store.setting('project_context',context.get('1.0','end').strip())).pack(pady=6)
+        ttk.Button(w,text='Importar configuración de proyecto',command=lambda:self.import_project(window)).pack(pady=10)
+        ttk.Label(w,text=f'Datos de este proyecto: {self.store.path}',wraplength=600).pack()
         place_window(window,650,600,parent=self)
     def finance(self):
         from .finance_ui import FinanceView
-        if self.finance_view is None:self.finance_view=FinanceView(self)
+        if self.finance_view is None:
+            self.finance_view=FinanceView(self);self.finance_views[self.project_id]=self.finance_view
         self.content.grid_remove();self.finance_view.grid(row=1,column=1,sticky='nsew');self.finance_view.refresh()
         self.finance_button.set_active(True)
         for button in self.nav_buttons.values():button.set_active(False)
@@ -393,5 +479,5 @@ class App(tk.Tk):
         import sys
         from .update_dialog import UpdateDialog
         root=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]
-        UpdateDialog(self,self.store,__version__,root,app=self)
+        UpdateDialog(self,self.root_store,__version__,root,app=self)
 if __name__=='__main__':App().mainloop()
