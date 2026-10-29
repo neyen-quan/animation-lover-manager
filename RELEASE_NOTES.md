@@ -1,5 +1,6 @@
-# Animation Lover 0.5.3
+# Animation Lover 0.5.4
 
-- Nuevo logo bordó de gestión de tareas: una lista con marcas de verificación, sin las iniciales AL.
-- El logo se muestra en el ejecutable, la ventana y el botón de Animation Lover.
-- Se mantienen los botones de cambio directo y los colores de cada proyecto.
+- Corregida la creación de tareas cuando la IA devuelve fechas con espacios, como `2 026-10-29`.
+- Se normalizan espacios y variantes de guiones sin inventar fechas ni cambiar su significado.
+- Si una fecha es inválida o las fechas se contradicen, se pide aclaración en español antes de guardar, conservando la entrada original.
+- Los errores de guardado dejan de mostrar el estado Procesando.

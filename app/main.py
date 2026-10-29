@@ -3,7 +3,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from .core import Store, PEOPLE, KINDS, STATES, ALIASES, fresh, today, urgency
-from .ai import interpret, transcribe
+from .ai import interpret, transcribe, prepare_task_dates
 
 from . import __version__
 from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, SHELL, apply_theme
@@ -287,6 +287,7 @@ class App(tk.Tk):
                     if not self.busy:self.status.configure(text='Listo · Podés deshacer el último cambio.');self.capture_status.configure(text='Listo · Podés revisar el texto y enviarlo.')
                 except Exception as e:
                     if on_error:on_error()
+                    self.status.configure(text='No se pudo guardar. Tu entrada sigue disponible.');self.capture_status.configure(text='Revisá la entrada y volvé a interpretar.')
                     messagebox.showerror('Revisar',str(e),parent=self.capture_window if self.capture_visible else self)
         except queue.Empty:pass
         self._poll_job=self.after(100,self.poll)
@@ -349,6 +350,7 @@ class App(tk.Tk):
                 else:raise ValueError(f'Formato aún no interpretable: {ext}. Pegá el texto o una captura.')
             return interpret(combined,author,items,model,target,images,project=project_context)
         def done(result):
+            result=prepare_task_dates(result,items)
             if not isinstance(result.get('creates',[]),list) or not isinstance(result.get('updates',[]),list):raise ValueError('Respuesta de IA inválida.')
             if result.get('project_mismatch'):
                 self.show_capture();messagebox.showinfo('Revisar proyecto','La entrada parece corresponder a otro proyecto. Seleccionalo arriba antes de enviarla. No se guardaron cambios.',parent=self);return

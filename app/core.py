@@ -1,6 +1,6 @@
 """Persistencia local. Ningún dato de uso se guarda en el repositorio."""
 from contextlib import closing
-import calendar, copy, datetime as dt, json, os, sqlite3, uuid, zipfile
+import calendar, copy, datetime as dt, json, os, re, sqlite3, uuid, zipfile
 from pathlib import Path
 DEFAULT_PEOPLE = ['Persona 1','Persona 2','Persona 3','Persona 4','Persona 5']
 PEOPLE = list(DEFAULT_PEOPLE)
@@ -14,9 +14,17 @@ def person(value,people=None,aliases=None):
     value=str(value).strip()
     return next((p for p in people if p.lower()==value.lower()), aliases.get(value.lower()))
 def date_value(value):
-    if len(value)==7:
-        y,m=map(int,value.split('-')); return dt.date(y,m,calendar.monthrange(y,m)[1]).isoformat()
-    return dt.date.fromisoformat(value).isoformat()
+    # Repair presentation-only noise; never guess an ambiguous or impossible date.
+    if isinstance(value,str):
+        normalized=re.sub(r'\s+','',value).translate(str.maketrans('‐‑‒–—−','------'))
+        match=re.fullmatch(r'([0-9]{4})-([0-9]{1,2})(?:-([0-9]{1,2}))?',normalized)
+        if match:
+            try:
+                y,m=int(match[1]),int(match[2])
+                day=int(match[3]) if match[3] is not None else calendar.monthrange(y,m)[1]
+                return dt.date(y,m,day).isoformat()
+            except ValueError:pass
+    raise ValueError('Fecha no válida: '+repr(value)+'. Usá AAAA-MM-DD o AAAA-MM (último día del mes).')
 def validate(data,people=None,aliases=None):
     people=PEOPLE if people is None else people
     d=copy.deepcopy(data)
@@ -26,7 +34,9 @@ def validate(data,people=None,aliases=None):
     if not d['author']: raise ValueError('Autor desconocido.')
     d['owners']=[person(p,people,aliases) for p in d.get('owners',[])]
     if None in d['owners']: raise ValueError('Responsable desconocido.')
-    for key in ['planned','deadline']: d[key]=date_value(d[key])
+    for key,label in [('planned','prevista'),('deadline','límite')]:
+        try:d[key]=date_value(d.get(key))
+        except ValueError as error:raise ValueError(f'La fecha {label} de «{d["title"]}» no es válida. Usá AAAA-MM-DD o AAAA-MM.') from error
     if d['planned']>d['deadline']: raise ValueError('La fecha prevista debe ser anterior o igual al límite.')
     if d.get('priority') not in ['Baja','Media','Alta','Máxima']: raise ValueError('Prioridad inválida.')
     return d
