@@ -80,7 +80,6 @@ class ProjectGuiTests(unittest.TestCase):
             app=App()
             try:
                 path=Path(folder)/'test.almproject';path.write_text(json.dumps(config()));app.projects.import_project(app.projects.preview_import(path))
-                app.project_selector.configure(values=[p['name'] for p in app.projects.list()])
                 original=fresh('Main task');app.store.apply([original]);app.input.insert('1.0','Main draft');app.save_draft()
                 self.assertTrue(app.switch_project('personal-test'));app.update()
                 self.assertEqual(app.store.items(),[]);self.assertEqual(PEOPLE,[people[0]])

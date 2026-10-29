@@ -4,6 +4,7 @@ import hashlib
 import tkinter as tk
 from tkinter import ttk,font as tkfont
 from .core import urgency
+from .theme import themed_drawing,recolor_widgets,project_color,project_primary
 from .theme import BG,CARD,FG,MUTED,ACCENT,LINE,SURFACE,HOVER
 
 STATUS_COLORS={'Pendiente':'#fdab3d','En curso':'#7b83ff','Esperando':'#e89a59','Terminado':'#00c875'}
@@ -113,6 +114,7 @@ class TaskBoard(ttk.Frame):
         used=size+step*(min(3,len(names))-1)+self.s(8)
         label=names[0] if len(names)==1 else f'{len(names)} personas'
         if width-used>self.s(25):self.text(x+used,y,self.fit(label,width-used,'small'),'small',MUTED)
+    @themed_drawing
     def render(self):
         if self.layout_job:self.after_cancel(self.layout_job);self.layout_job=None
         if not self.winfo_exists():return
@@ -193,13 +195,14 @@ class TaskBoard(ttk.Frame):
         y=self.s(35)
         self.text(pad+self.s(14),y,'Tu tablero empieza acá','empty')
         self.text(pad+self.s(14),y+self.s(38),'Creá una tarjeta o soltá una idea para organizar lo que sigue.','normal',MUTED)
-        self.round_rect(pad+self.s(14),y+self.s(70),self.s(155),self.s(38),ACCENT,radius=6)
+        self.round_rect(pad+self.s(14),y+self.s(70),self.s(155),self.s(38),project_primary(self),radius=6)
         self.text(pad+self.s(91),y+self.s(89),'+ Nueva tarjeta','bold',anchor='center')
         self.add_hit(pad+self.s(14),y+self.s(70),self.s(155),self.s(38),'new',None)
         self.canvas.configure(scrollregion=(0,0,pad*2+width,max(self.s(250),self.canvas.winfo_height())))
     def hit(self,event):
         x=self.canvas.canvasx(event.x);y=self.canvas.canvasy(event.y)
         return next((h for h in reversed(self.hits) if h[0]<=x<=h[2] and h[1]<=y<=h[3]),None)
+    @themed_drawing
     def paint_selection(self):
         for id,shape in self.shapes.items():
             selected=id==self.selected_id;hover=id==self.hover_id
@@ -224,7 +227,7 @@ class TaskBoard(ttk.Frame):
         tk.Label(body,text=d['title'],font=self.fonts['bold'],fg=FG,bg='#303650',wraplength=self.s(340),justify='left').pack(anchor='w')
         details=d.get('summary') or 'Abrí la tarjeta para ver o editar sus detalles.'
         tk.Label(body,text=details[:600],font=self.fonts['small'],fg=MUTED,bg='#303650',wraplength=self.s(340),justify='left').pack(anchor='w',pady=(5,0))
-        tip.update_idletasks();tip.geometry(f'+{max(0,min(x+14,self.winfo_screenwidth()-tip.winfo_reqwidth()-15))}+{max(0,min(y+18,self.winfo_screenheight()-tip.winfo_reqheight()-40))}')
+        recolor_widgets(tip);tip.update_idletasks();tip.geometry(f'+{max(0,min(x+14,self.winfo_screenwidth()-tip.winfo_reqwidth()-15))}+{max(0,min(y+18,self.winfo_screenheight()-tip.winfo_reqheight()-40))}')
     def click(self,event):
         self.hide_tip();self.canvas.focus_set();hit=self.hit(event)
         if not hit:self.selected_id=None;self.paint_selection();return
@@ -251,6 +254,7 @@ class TaskBoard(ttk.Frame):
         for label,action in [('Abrir tarjeta','open'),('Preparar mensaje','notify'),(delete_label,'delete')]:
             if action=='notify' and getattr(self,'personal',False):continue
             menu.add_command(label=label,command=lambda a=action:self.on_action(a))
+        menu.configure(bg=project_color(self,CARD),fg=project_color(self,FG),activebackground=project_color(self,HOVER),activeforeground=project_color(self,FG))
         try:menu.tk_popup(x,y)
         finally:menu.grab_release()
     def navigate(self,direction):

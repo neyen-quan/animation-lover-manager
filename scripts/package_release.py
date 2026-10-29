@@ -28,7 +28,7 @@ def package(root,out,repo,previous=None):
     update_name=f'{PRODUCT}-Actualizar-{__version__}.zip';update_zip(root,out/update_name,inventory,inventory)
     shutil.copy2(root/HELPER,out/HELPER)
     def asset(name):return {'url':f'https://github.com/{repo}/releases/download/v{__version__}/{name}','sha256':digest(out/name),'size':(out/name).stat().st_size}
-    feed={'schema':1,'product':PRODUCT,'version':__version__,'notes':'Selector de proyectos con tareas, finanzas y comprobantes independientes. Modo personal, proveedores de créditos IA y respaldo de todos los proyectos.','full':asset(update_name),'installer':asset(full_name),'patches':[],'bootstrap':asset(HELPER)}
+    feed={'schema':1,'product':PRODUCT,'version':__version__,'notes':'Nuevo botón de proyectos con tarjetas para elegir. El proyecto personal tiene una paleta verde en el tablero, finanzas, navegación y botones.','full':asset(update_name),'installer':asset(full_name),'patches':[],'bootstrap':asset(HELPER)}
     if previous and Path(previous).exists():
         with zipfile.ZipFile(previous) as z:
             candidate=[p for p in z.namelist() if p.endswith('/installation.json')]

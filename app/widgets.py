@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk,font as tkfont
+from .theme import themed_drawing
 
 class NavItem(tk.Canvas):
     """Compact navigation with a drawn icon, frosted surface and keyboard focus."""
@@ -21,6 +22,7 @@ class NavItem(tk.Canvas):
         pressed=self.pressed;self.pressed=False;self.draw()
         if pressed and 0<=event.x<=self.winfo_width() and 0<=event.y<=self.winfo_height():self.invoke()
     def invoke(self):self.command();return 'break'
+    @themed_drawing
     def draw(self,event=None):
         self.delete('all');w=max(1,self.winfo_width());h=self.winfo_height();r=7
         fill='#303d62' if self.active else '#29334c' if self.hover else '#20273c'

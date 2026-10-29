@@ -13,6 +13,7 @@ from .finance import Finance, KINDS, PLATFORMS, entry, cents, usd, totals, outst
 from .theme import BG, CARD, FG, MUTED, ACCENT, SURFACE, LINE, apply_popup_theme
 from .widgets import WrapBar, ScrollArea
 from .windowing import place_window
+from .theme import themed_drawing,recolor_widgets
 
 class FinanceView(ttk.Frame):
     def __init__(self, app):
@@ -96,6 +97,7 @@ class FinanceView(ttk.Frame):
         self.filtered=[d for d in self.rows if (self.month.get()=='Todos' or (d['period'] if d['kind']=='Insight' else d['date'][:7])==self.month.get())]
         self.draw_metrics();self.draw_chart();self.render_table()
 
+    @themed_drawing
     def draw_metrics(self):
         if not hasattr(self,'balance'):return
         c=self.metric_frame;c.delete('all');w=max(1,c.winfo_width());t=self.balance
@@ -108,6 +110,7 @@ class FinanceView(ttk.Frame):
             detail=('Incluye en tránsito: '+usd(t['anticipated'])) if i==0 else (('Dinero propio invertido' if self.personal else 'Deudas con el equipo') if i==1 else 'Saldo global, sin filtro mensual')
             c.create_text(x+12,66,text=detail,anchor='w',fill=MUTED,font=('Segoe UI',-10))
 
+    @themed_drawing
     def draw_chart(self):
         if not hasattr(self,'filtered'):return
         c=self.chart;c.delete('all');w=max(100,c.winfo_width());t=totals(self.filtered)
@@ -336,7 +339,7 @@ class FinanceView(ttk.Frame):
             from .finance_capture import FinanceCapture
             self.composer=FinanceCapture(self)
         self.body.grid_remove();self.bottom.grid_remove();self.metric_frame.grid_remove();self.tab_bar.grid_remove();self.tools.grid_remove()
-        self.composer.grid(row=5,column=0,rowspan=2,sticky='nsew');self.composer.start(hint)
+        self.composer.grid(row=5,column=0,rowspan=2,sticky='nsew');recolor_widgets(self.composer);self.composer.start(hint)
         return self.composer
 
     def leave_capture(self):

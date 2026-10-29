@@ -129,7 +129,7 @@ class FinanceCapture(ttk.Frame):
             if snapshot!=(self.box.get('1.0','end').strip(),self.paths,self.hint.get()):
                 self.status.configure(text='La entrada cambió durante la interpretación. Volvé a interpretar.');return
             if result.get('project_mismatch'):
-                self.status.configure(text='Esta entrada corresponde a otro proyecto. Cambialo en el desplegable antes de registrar.');return
+                self.status.configure(text='Esta entrada corresponde a otro proyecto. Cambialo desde el botón de proyectos antes de registrar.');return
             rows,questions=proposals(result,people,categories,hint=hint,aliases=aliases,personal=personal,providers=providers,platforms=self.ledger.platforms())
             if questions:
                 self.status.configure(text='Necesito aclarar: '+' · '.join(questions)+' Agregá la respuesta al mensaje.');return

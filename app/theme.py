@@ -36,6 +36,8 @@ def apply_theme(root):
 
 def apply_popup_theme(window):
     """Warm, contrasting dialogs; named ttk styles leave the dark board intact."""
+    POPUP_ACCENT=project_color(window,globals()['POPUP_ACCENT'])
+    POPUP_BORDER=project_color(window,globals()['POPUP_BORDER'])
     window.configure(bg=POPUP_BG,highlightthickness=2,highlightbackground=POPUP_BORDER,highlightcolor=POPUP_BORDER)
     style=ttk.Style(window)
     style.configure('Popup.TFrame',background=POPUP_BG)
@@ -93,3 +95,108 @@ def apply_popup_theme(window):
         for child in widget.winfo_children():
             if not isinstance(child,tk.Toplevel):restyle(child)
     for child in window.winfo_children():restyle(child)
+    palette=getattr(window._root(),'_project_palette',{})
+    for name in ['Popup.Accent.TButton','Popup.TButton','Popup.TEntry','Popup.TCombobox','Popup.TCheckbutton','Popup.TSeparator','Popup.Horizontal.TProgressbar','Popup.Vertical.TProgressbar']:_map_style(style,name,palette)
+
+# A project theme affects presentation only; semantic warnings keep their colors.
+GREEN_PALETTE={
+    BG:'#10251f',CARD:'#203d33',SURFACE:'#183128',HOVER:'#294e3f',LINE:'#355849',
+    FG:'#edf8f1',MUTED:'#a4c2b2',ACCENT:'#46bd88',SHELL:'#0a1b16',
+    '#2c3650':'#28523f','#414f6b':'#426e58','#53617b':'#608c72','#1b2237':'#10291e',
+    '#626fe0':'#277950','#8391f2':'#56b780','#a2adff':'#9cdbb4','#4651ad':'#1b5639',
+    '#7a82ff':'#369d6c','#353b62':'#254b3a','#77809c':'#72907e',
+    '#303961':'#28533e','#dfe4ff':'#e2f6e8','#3c4777':'#386a50','#bcc4ff':'#a7e7be',
+    '#20283e':'#18392b','#3a4660':'#3a634b','#45516c':'#4e785e','#1a2034':'#10271c','#c5cee3':'#c3ddce',
+    '#232c43':'#1c3b2d','#46516e':'#466e57','#a7afff':'#9de7b9','#aab8ff':'#a0e2b7',
+    '#303d62':'#2b5a41','#29334c':'#254a36','#20273c':'#173325','#25304b':'#21432f',
+    '#7386c1':'#70b68d','#4b5c7b':'#4c8163','#303b52':'#31533f','#526282':'#679479',
+    '#39445c':'#3b634b','#b2baff':'#a7efc1','#f2f3fc':'#eefaf2','#cdd6eb':'#d0e6d6',
+    '#b7baff':'#b0e3c2','#8bc9ef':'#9dddb7','#c4b3f3':'#b1d8b5','#9fc6ed':'#abd9bb',
+    '#24283f':'#203e2d','#303653':'#2c583f','#53607b':'#52795f','#303650':'#294b36',
+    '#7b83ff':'#5fbc8c','#8b98ff':'#91d6a9','#aaa5ff':'#b0d7a7','#96a6c5':'#a1bfa9',
+    '#3b477a':'#2d6548','#8b96ff':'#84d6a1','#b19bdb':'#a3d2ae','#72bdd9':'#90cfb4',
+    '#b5bfff':'#b1ebc6',POPUP_ACCENT:'#2b7650',POPUP_BORDER:'#79a68c',
+    '#777dcb':'#5a9f77','#a1a6e5':'#a6d8b8','#3d438b':'#205738','#444a9b':'#205f40',
+}
+
+PROJECT_STYLES=['.','TFrame','Panel.TFrame','Shell.TFrame','Shell.TLabel','TLabel','TButton','Accent.TButton',
+    'Nav.TButton','Active.Nav.TButton','Tab.TButton','Active.Tab.TButton','TEntry','TCombobox','TCheckbutton',
+    'TSeparator','Toolbar.TFrame','Toolbar.TLabel','Vertical.TScrollbar','Horizontal.TScrollbar',
+    'Finance.Treeview','Finance.Treeview.Heading','Finance.TButton','Finance.Accent.TButton']
+
+def project_color(widget,color):
+    palette=getattr(widget._root(),'_project_palette',{})
+    return palette.get(str(color).lower(),color)
+
+def project_primary(widget):
+    return getattr(widget._root(),'_project_palette',{}).get('#626fe0',ACCENT)
+
+def recolor_canvas(canvas):
+    if not canvas.winfo_exists():return
+    for item in canvas.find_all():
+        options=canvas.itemconfigure(item)
+        for key in ('fill','outline'):
+            if key in options:
+                value=canvas.itemcget(item,key);mapped=project_color(canvas,value)
+                if value!=mapped:canvas.itemconfigure(item,**{key:mapped})
+
+def themed_drawing(method):
+    from functools import wraps
+    @wraps(method)
+    def draw(self,*args,**kwargs):
+        result=method(self,*args,**kwargs)
+        canvases=[self] if isinstance(self,tk.Canvas) else [getattr(self,name,None) for name in ('canvas','metric_frame','chart')]
+        for canvas in canvases:
+            if isinstance(canvas,tk.Canvas):recolor_canvas(canvas)
+        return result
+    return draw
+
+def recolor_widgets(parent):
+    """Remember base colors once, so switching back restores exact original hues."""
+    if not parent.winfo_exists():return
+    keys=('background','foreground','insertbackground','highlightbackground','highlightcolor','selectbackground','selectforeground')
+    original=getattr(parent,'_project_base_colors',{})
+    config=parent.configure()
+    for key in keys:
+        if key not in config:continue
+        if key not in original:
+            value=str(parent.cget(key))
+            if value.startswith('#'):original[key]=value
+        if key in original:parent.configure(**{key:project_color(parent,original[key])})
+    parent._project_base_colors=original
+    if isinstance(parent,tk.Text):
+        tags=getattr(parent,'_project_base_tags',{})
+        for tag in parent.tag_names():
+            for option in ('foreground','background'):
+                key=(tag,option)
+                if key not in tags:
+                    value=parent.tag_cget(tag,option)
+                    if str(value).startswith('#'):tags[key]=value
+                if key in tags:parent.tag_configure(tag,**{option:project_color(parent,tags[key])})
+        parent._project_base_tags=tags
+    for child in parent.winfo_children():
+        if not isinstance(child,tk.Toplevel):recolor_widgets(child)
+
+def _map_style(style,name,palette):
+    original=style.configure(name) or {}
+    colors={key:palette.get(str(value).lower(),value) for key,value in original.items() if str(value).startswith('#')}
+    if colors:style.configure(name,**colors)
+    for key,entries in style.map(name).items():
+        changed=[tuple(entry[:-1])+(palette.get(str(entry[-1]).lower(),entry[-1]),) for entry in entries]
+        style.map(name,**{key:changed})
+
+def apply_project_theme(root,personal=False):
+    root._project_palette=GREEN_PALETTE if personal else {}
+    apply_theme(root)
+    style=ttk.Style(root)
+    # These styles may be created lazily by the finance workspace. Restore their
+    # base values before mapping, including when returning to the main project.
+    style.configure('Finance.Treeview',background=SURFACE,fieldbackground=SURFACE,foreground=FG,bordercolor=LINE,lightcolor=LINE,darkcolor=LINE)
+    style.configure('Finance.Treeview.Heading',background=CARD,foreground=FG,bordercolor=LINE,lightcolor=LINE,darkcolor=LINE)
+    style.map('Finance.Treeview',background=[('selected','#3b477a')],foreground=[('selected','#ffffff')])
+    style.configure('Finance.TButton',font=('Segoe UI',-13,'bold'),padding=(8,6))
+    style.configure('Finance.Accent.TButton',font=('Segoe UI',-13,'bold'),padding=(8,6),background=project_primary(root),foreground='white')
+    for name in PROJECT_STYLES:_map_style(style,name,root._project_palette)
+    recolor_widgets(root)
+    root.option_add('*TCombobox*Listbox.background',project_color(root,CARD))
+    root.option_add('*TCombobox*Listbox.foreground',project_color(root,FG))

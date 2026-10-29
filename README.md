@@ -68,7 +68,7 @@ Más opciones ofrece categorías editables, desglose de gastos, historial, respa
 
 ## Proyectos
 
-El selector superior cambia de espacio. Animation Lover siempre es el proyecto de inicio y mantiene la base histórica en su ubicación original. Cada proyecto adicional guarda su base, adjuntos y comprobantes en `projects/<id>/`. Su equipo, tareas, papelera, historial, borradores, categorías, plataformas y contexto de IA son independientes. Ollama, canal de actualización y destino de respaldo se comparten desde el perfil principal.
+El botón superior abre una ventana centrada con tarjetas para elegir el proyecto con un clic. El proyecto personal usa una paleta verde, y Animation Lover su paleta azul/violeta. Animation Lover siempre es el proyecto de inicio y mantiene la base histórica en su ubicación original. Cada proyecto adicional guarda su base, adjuntos y comprobantes en `projects/<id>/`. Su equipo, tareas, papelera, historial, borradores, categorías, plataformas y contexto de IA son independientes. Ollama, canal de actualización y destino de respaldo se comparten desde el perfil principal.
 
 Los proyectos personales tienen una sola persona y asignan automáticamente las tareas. Se ocultan los controles de equipo y se muestran inversión pendiente de recuperar y balance acumulado. Créditos IA permite seleccionar proveedor y aclarar el nombre en Otras.
 

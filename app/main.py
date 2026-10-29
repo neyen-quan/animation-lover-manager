@@ -11,6 +11,8 @@ from .widgets import ScrollArea, WrapBar, NavItem
 from .board import TaskBoard
 from .windowing import place_window
 from .projects import Projects
+from .project_picker import ProjectButton,ProjectPicker
+from .theme import apply_project_theme,recolor_widgets
 
 class App(tk.Tk):
     def __init__(self):
@@ -29,8 +31,8 @@ class App(tk.Tk):
         self.columnconfigure(1,weight=1);self.rowconfigure(1,weight=1)
         header=ttk.Frame(self,padding=(20,12),style='Shell.TFrame');header.grid(row=0,column=0,columnspan=2,sticky='ew');header.columnconfigure(0,weight=1)
         self.project_name=tk.StringVar(value='Animation Lover')
-        self.project_selector=ttk.Combobox(header,textvariable=self.project_name,values=[p['name'] for p in self.projects.list()],state='readonly',width=23,font=('Segoe UI',-18,'bold'))
-        self.project_selector.grid(row=0,column=0,sticky='w',padx=(0,10));self.project_selector.bind('<<ComboboxSelected>>',self.select_project)
+        self.project_selector=ProjectButton(header,self.project_name,self.choose_project)
+        self.project_selector.grid(row=0,column=0,sticky='w',padx=(0,10));self.project_picker=None
         self.capture_button=ttk.Button(header,text='+ Soltar idea',command=self.toggle_capture);self.capture_button.grid(row=0,column=1,padx=5)
         self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=2,padx=5)
         ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=3,padx=(5,0))
@@ -118,6 +120,22 @@ class App(tk.Tk):
         self.project_caption.configure(text=name+'  '+__version__)
         self.capture_window.title('Soltar idea · '+name)
         self.title(name+' · Gestión · '+__version__)
+        self.restyle_project()
+    def restyle_project(self):
+        apply_project_theme(self,self.personal)
+        self.project_selector.draw()
+        for button in list(self.nav_buttons.values())+[self.finance_button]:button.draw()
+        self.board.render()
+        for view in self.finance_views.values():view.draw_metrics();view.draw_chart()
+    def choose_project(self):
+        if self.project_picker and self.project_picker.winfo_exists():self.project_picker.lift();return
+        if self.busy or self.recording:
+            messagebox.showinfo('Operación en curso','Terminá la grabación o el procesamiento antes de cambiar de proyecto.',parent=self);return
+        visible=[w for w in self.winfo_children() if isinstance(w,tk.Toplevel) and w is not self.capture_window and w.state()!='withdrawn']
+        if visible:
+            messagebox.showinfo('Cerrar ventana','Cerrá el detalle o ajuste abierto antes de cambiar de proyecto.',parent=visible[0]);return
+        self.project_picker=ProjectPicker(self)
+
     def select_project(self,event=None):
         p=next((p for p in self.projects.list() if p['name']==self.project_name.get()),None)
         if p:self.switch_project(p['id'])
@@ -161,8 +179,7 @@ class App(tk.Tk):
             message=data['project']['name']+'\nProyecto personal · USD\nGastos iniciales: '+usd(t['expenses'])+'\nDinero propio por recuperar: '+usd(t['debt_total'])+'\n\n¿Cargar este proyecto?'
             if not messagebox.askyesno('Revisar proyecto',message,parent=parent):return
             self.projects.import_project(data)
-            self.project_selector.configure(values=[p['name'] for p in self.projects.list()])
-            messagebox.showinfo('Proyecto cargado','Ya podés seleccionarlo en el desplegable de arriba a la izquierda.'+('\n'+self.projects.backup_warning if self.projects.backup_warning else ''),parent=parent)
+            messagebox.showinfo('Proyecto cargado','Ya podés elegirlo desde el botón de proyectos de arriba a la izquierda.'+('\n'+self.projects.backup_warning if self.projects.backup_warning else ''),parent=parent)
         except Exception as e:messagebox.showerror('Importar proyecto',str(e),parent=parent)
 
     def toggle_capture(self):
@@ -471,7 +488,7 @@ class App(tk.Tk):
         from .finance_ui import FinanceView
         if self.finance_view is None:
             self.finance_view=FinanceView(self);self.finance_views[self.project_id]=self.finance_view
-        self.content.grid_remove();self.finance_view.grid(row=1,column=1,sticky='nsew');self.finance_view.refresh()
+        self.content.grid_remove();self.finance_view.grid(row=1,column=1,sticky='nsew');self.finance_view.refresh();self.restyle_project()
         self.finance_button.set_active(True)
         for button in self.nav_buttons.values():button.set_active(False)
     def updates(self):

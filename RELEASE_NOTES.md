@@ -1,10 +1,7 @@
-# Animation Lover 0.5.0
+# Animation Lover 0.5.1
 
-- Selector de proyecto arriba a la izquierda. El programa siempre inicia en Animation Lover.
-- Tareas, notas, historial, borradores, contexto de IA y finanzas independientes por proyecto.
-- Modo personal con asignación automática y controles de equipo simplificados.
-- Proveedores de Créditos IA y aclaración para Otras; plataformas y categorías propias de cada proyecto.
-- Configuración privada de proyectos con gastos iniciales, importable una sola vez desde Ajustes.
-- Modelo de Ollama, actualizador y carpeta de respaldo compartidos; copias independientes de todos los proyectos.
-- Se bloquea el cambio mientras se graba, procesa o está abierto un detalle para evitar guardar en el proyecto equivocado.
-- La base de Animation Lover conserva su ubicación, sus registros y comprobantes.
+- Botón de proyectos con insignia, relieve y respuesta al pasar el mouse.
+- Al tocarlo se abre una ventana centrada con una tarjeta por proyecto; un clic cambia al elegido.
+- Paleta verde para el proyecto personal: fondos, navegación, botones, tablero y finanzas, con detalles menta.
+- Animation Lover recupera su paleta azul y violeta al volver. Se mantienen los colores de alertas y el contraste de las ventanas.
+- Se conserva la separación de datos y el inicio predeterminado en Animation Lover.
