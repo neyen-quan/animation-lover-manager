@@ -11,7 +11,7 @@ from .widgets import ScrollArea, WrapBar, NavItem
 from .board import TaskBoard
 from .windowing import place_window
 from .projects import Projects
-from .project_picker import ProjectButton,ProjectPicker
+from .project_picker import ProjectTabs
 from .theme import apply_project_theme,recolor_widgets
 
 class App(tk.Tk):
@@ -29,13 +29,14 @@ class App(tk.Tk):
         self.protocol('WM_DELETE_WINDOW',self.close)
         self.view=tk.StringVar(value='Hoy');self.author=tk.StringVar(value=PEOPLE[0]);self.filter_person=tk.StringVar(value='Todos');self.keep=tk.BooleanVar();self.search=tk.StringVar()
         self.columnconfigure(1,weight=1);self.rowconfigure(1,weight=1)
-        header=ttk.Frame(self,padding=(20,12),style='Shell.TFrame');header.grid(row=0,column=0,columnspan=2,sticky='ew');header.columnconfigure(0,weight=1)
+        header=ttk.Frame(self,padding=(20,12),style='Shell.TFrame');self.header=header;self._header_stacked=None;header.grid(row=0,column=0,columnspan=2,sticky='ew');header.columnconfigure(0,weight=1)
         self.project_name=tk.StringVar(value='Animation Lover')
-        self.project_selector=ProjectButton(header,self.project_name,self.choose_project)
-        self.project_selector.grid(row=0,column=0,sticky='w',padx=(0,10));self.project_picker=None
+        self.project_selector=ProjectTabs(header,self.projects.list(),self.project_id,self.switch_project)
+        self.project_selector.grid(row=0,column=0,sticky='ew',padx=(0,10))
         self.capture_button=ttk.Button(header,text='+ Soltar idea',command=self.toggle_capture);self.capture_button.grid(row=0,column=1,padx=5)
         self.update_button=ttk.Button(header,text='Actualizar programa',style='Accent.TButton',command=self.updates);self.update_button.grid(row=0,column=2,padx=5)
-        ttk.Button(header,text='Ajustes',command=self.settings).grid(row=0,column=3,padx=(5,0))
+        self.settings_button=ttk.Button(header,text='Ajustes',command=self.settings);self.settings_button.grid(row=0,column=3,padx=(5,0))
+        self.header.bind('<Configure>',self.layout_header)
         sidebar=tk.Frame(self,bg=BG,width=round(190*max(.85,float(self.tk.call('tk','scaling'))/1.333)));sidebar.grid(row=1,column=0,sticky='ns');sidebar.grid_propagate(False);sidebar.rowconfigure(0,weight=1);sidebar.columnconfigure(0,weight=1)
         nav=ttk.Frame(sidebar,padding=(14,12));nav.grid(row=0,column=0,sticky='nsew')
         ttk.Label(nav,text='ESPACIO PERSONAL',foreground=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',padx=10,pady=(0,8))
@@ -120,25 +121,24 @@ class App(tk.Tk):
         self.project_caption.configure(text=name+'  '+__version__)
         self.capture_window.title('Soltar idea · '+name)
         self.title(name+' · Gestión · '+__version__)
+        self.project_selector.refresh(self.projects.list(),self.project_id)
         self.restyle_project()
     def restyle_project(self):
         apply_project_theme(self,self.personal)
-        self.project_selector.draw()
+        self.project_selector.redraw();self.layout_header()
         for button in list(self.nav_buttons.values())+[self.finance_button]:button.draw()
         self.board.render()
         for view in self.finance_views.values():view.draw_metrics();view.draw_chart()
-    def choose_project(self):
-        if self.project_picker and self.project_picker.winfo_exists():self.project_picker.lift();return
-        if self.busy or self.recording:
-            messagebox.showinfo('Operación en curso','Terminá la grabación o el procesamiento antes de cambiar de proyecto.',parent=self);return
-        visible=[w for w in self.winfo_children() if isinstance(w,tk.Toplevel) and w is not self.capture_window and w.state()!='withdrawn']
-        if visible:
-            messagebox.showinfo('Cerrar ventana','Cerrá el detalle o ajuste abierto antes de cambiar de proyecto.',parent=visible[0]);return
-        self.project_picker=ProjectPicker(self)
+    def layout_header(self,event=None):
+        buttons=(self.capture_button,self.update_button,self.settings_button)
+        project_width=sum(t.winfo_reqwidth()+6 for t in self.project_selector.tabs.values())
+        needed=project_width+sum(b.winfo_reqwidth()+10 for b in buttons)+50
+        stacked=self.header.winfo_width()<needed
+        if stacked==self._header_stacked:return
+        self._header_stacked=stacked
+        self.project_selector.grid_configure(row=0,column=0,columnspan=4 if stacked else 1,pady=(0,4 if stacked else 0))
+        for i,button in enumerate(buttons,1):button.grid_configure(row=1 if stacked else 0,column=i)
 
-    def select_project(self,event=None):
-        p=next((p for p in self.projects.list() if p['name']==self.project_name.get()),None)
-        if p:self.switch_project(p['id'])
     def switch_project(self,id):
         previous=self.projects.descriptor(self.project_id)
         if id==self.project_id:return True
@@ -179,7 +179,8 @@ class App(tk.Tk):
             message=data['project']['name']+'\nProyecto personal · USD\nGastos iniciales: '+usd(t['expenses'])+'\nDinero propio por recuperar: '+usd(t['debt_total'])+'\n\n¿Cargar este proyecto?'
             if not messagebox.askyesno('Revisar proyecto',message,parent=parent):return
             self.projects.import_project(data)
-            messagebox.showinfo('Proyecto cargado','Ya podés elegirlo desde el botón de proyectos de arriba a la izquierda.'+('\n'+self.projects.backup_warning if self.projects.backup_warning else ''),parent=parent)
+            self.project_selector.refresh(self.projects.list(),self.project_id)
+            messagebox.showinfo('Proyecto cargado','Ya podés elegirlo con su botón de arriba a la izquierda.'+('\n'+self.projects.backup_warning if self.projects.backup_warning else ''),parent=parent)
         except Exception as e:messagebox.showerror('Importar proyecto',str(e),parent=parent)
 
     def toggle_capture(self):

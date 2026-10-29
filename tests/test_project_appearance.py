@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 @unittest.skipUnless(sys.platform=='win32' or os.getenv('DISPLAY'),'Requiere escritorio')
 class ProjectAppearanceTests(unittest.TestCase):
-    def test_chooser_direct_selection_green_theme_and_exact_return(self):
+    def test_single_click_tabs_green_theme_and_exact_return(self):
         import tkinter as tk
         from tkinter import ttk
         from app.main import App
@@ -16,17 +16,16 @@ class ProjectAppearanceTests(unittest.TestCase):
             try:
                 path=Path(tmp)/'project.almproject'
                 path.write_text(json.dumps(dict(product='AnimationLoverProject',schema=1,project=dict(id='personal-test',name='Proyecto personal',personal=True),expenses=[])))
-                app.projects.import_project(app.projects.preview_import(path));app.update()
-                self.assertIsInstance(app.project_selector,tk.Canvas)
+                app.projects.import_project(app.projects.preview_import(path));app.project_selector.refresh(app.projects.list(),app.project_id);app.update()
+                self.assertEqual(set(app.project_selector.tabs),{'main','personal-test'})
+                for tab in app.project_selector.tabs.values():self.assertTrue(tab.winfo_ismapped())
                 self.assertEqual(app.cget('background'),BG)
-                app.project_selector.invoke();app.update();picker=app.project_picker
-                self.assertEqual(set(picker.cards),{'main','personal-test'})
-                self.assertEqual(picker.grab_current(),picker)
-                if os.getenv('ALM_SCREENSHOT'):
-                    from PIL import ImageGrab
-                    ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'].replace('.png','-project-chooser.png'))
-                picker.cards['personal-test'].invoke();app.update()
-                self.assertEqual(app.project_id,'personal-test');self.assertFalse(picker.winfo_exists())
+                popups={str(w) for w in app.winfo_children() if isinstance(w,tk.Toplevel)}
+                app.project_selector.tabs['personal-test'].invoke();app.update()
+                self.assertEqual(app.project_id,'personal-test')
+                self.assertEqual(popups,{str(w) for w in app.winfo_children() if isinstance(w,tk.Toplevel)})
+                self.assertTrue(app.project_selector.tabs['personal-test'].active)
+                self.assertFalse(app.project_selector.tabs['main'].active)
                 self.assertEqual(app.cget('background'),GREEN_PALETTE[BG])
                 self.assertEqual(app.board.canvas.cget('background'),GREEN_PALETTE[SURFACE])
                 self.assertEqual(ttk.Style(app).lookup('Accent.TButton','background'),GREEN_PALETTE['#626fe0'])
@@ -41,10 +40,19 @@ class ProjectAppearanceTests(unittest.TestCase):
                 if os.getenv('ALM_SCREENSHOT'):
                     from PIL import ImageGrab
                     ImageGrab.grab().save(os.environ['ALM_SCREENSHOT'].replace('.png','-green-project.png'))
-                app.project_selector.invoke();app.update();app.project_picker.cards['main'].invoke();app.update()
+                app.project_selector.tabs['main'].invoke();app.update()
                 self.assertEqual(app.project_id,'main');self.assertEqual(app.cget('background'),BG)
                 self.assertEqual(app.board.canvas.cget('background'),SURFACE)
                 self.assertEqual(ttk.Style(app).lookup('Accent.TButton','background'),'#626fe0')
-                app.project_selector.invoke();app.update();app.project_picker.destroy();app.update()
+                app.project_selector.tabs['main'].invoke();app.update()
                 self.assertEqual(app.project_id,'main')
+                for i in (3,4):
+                    path.write_text(json.dumps(dict(product='AnimationLoverProject',schema=1,project=dict(id='extra-'+str(i),name='Proyecto '+str(i),personal=True),expenses=[])))
+                    app.projects.import_project(app.projects.preview_import(path))
+                app.configure_project_controls();app.geometry('780x520');app.update()
+                self.assertEqual(len(app.project_selector.tabs),4)
+                for tab in app.project_selector.tabs.values():
+                    self.assertTrue(tab.winfo_ismapped())
+                    self.assertLessEqual(tab.winfo_rootx()+tab.winfo_width(),app.winfo_rootx()+app.winfo_width())
+                    self.assertLessEqual(tab.winfo_rooty()+tab.winfo_height(),app.header.winfo_rooty()+app.header.winfo_height())
             finally:app.close();PEOPLE[:]=people;ALIASES.clear();ALIASES.update(aliases)
