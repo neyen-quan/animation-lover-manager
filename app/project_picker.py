@@ -16,7 +16,7 @@ class ProjectTab(tk.Canvas):
     def __init__(self,parent,project,command):
         self.name_font=tkfont.Font(root=parent,family='Segoe UI',size=-15,weight='bold')
         width=max(125,min(260,self.name_font.measure(project['name'])+58))
-        super().__init__(parent,width=width,height=40,bg=SHELL,highlightthickness=0,takefocus=True,cursor='hand2')
+        super().__init__(parent,width=width,height=36,bg=SHELL,highlightthickness=0,takefocus=True,cursor='hand2')
         self.project=project;self.command=command;self.active=False;self.hover=False;self.pressed=False
         self.bind('<Configure>',self.draw);self.bind('<Enter>',lambda e:self.over(True));self.bind('<Leave>',lambda e:self.over(False))
         self.bind('<Button-1>',lambda e:self.press());self.bind('<ButtonRelease-1>',self.release)
@@ -37,12 +37,12 @@ class ProjectTab(tk.Canvas):
         if self.active:rounded(self,1,4,w-2,h-5,'#07150e' if green else '#090e1c','#07150e' if green else '#090e1c')
         rounded(self,1,top,w-2,h-top-3,fill,border)
         if self.active:self.create_line(12,top+2,w-12,top+2,fill=accent,width=2)
-        rounded(self,8,top+7,27,22,'#437454' if green and self.active else '#4a5d91' if self.active else fill,border,r=6)
-        self.create_text(21.5,top+18,text=badge(self.project['name']),fill=accent if self.active or self.hover else '#70947e' if green else '#7b89a9',font=('Segoe UI',-10,'bold'))
+        rounded(self,8,top+5,27,22,'#437454' if green and self.active else '#4a5d91' if self.active else fill,border,r=6)
+        self.create_text(21.5,top+16,text=badge(self.project['name']),fill=accent if self.active or self.hover else '#70947e' if green else '#7b89a9',font=('Segoe UI',-10,'bold'))
         label=self.project['name']
         while label and self.name_font.measure(label)>w-49:label=label[:-1]
         if label!=self.project['name']:label=label[:-1]+'…'
-        self.create_text(43,top+18,text=label,anchor='w',fill='#f1f8f4' if self.active else '#b7d1c0' if green and self.hover else '#c4cce1' if self.hover else '#789b85' if green else '#8e9bb8',font=self.name_font)
+        self.create_text(43,top+16,text=label,anchor='w',fill='#f1f8f4' if self.active else '#b7d1c0' if green and self.hover else '#c4cce1' if self.hover else '#789b85' if green else '#8e9bb8',font=self.name_font)
 
 class ProjectTabs(WrapBar):
     def __init__(self,parent,projects,current,command):
