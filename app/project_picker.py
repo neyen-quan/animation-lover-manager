@@ -1,6 +1,8 @@
 """Always-visible project tabs: one click selects the target workspace."""
 import tkinter as tk
 from tkinter import font as tkfont
+import sys
+from pathlib import Path
 from .widgets import WrapBar
 from .theme import SHELL
 
@@ -18,6 +20,10 @@ class ProjectTab(tk.Canvas):
         width=max(125,min(260,self.name_font.measure(project['name'])+58))
         super().__init__(parent,width=width,height=36,bg=SHELL,highlightthickness=0,takefocus=True,cursor='hand2')
         self.project=project;self.command=command;self.active=False;self.hover=False;self.pressed=False
+        self.task_logo=None
+        if project['id']=='main':
+            icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets/icon-24.png'
+            if icon.exists():self.task_logo=tk.PhotoImage(master=self,file=icon)
         self.bind('<Configure>',self.draw);self.bind('<Enter>',lambda e:self.over(True));self.bind('<Leave>',lambda e:self.over(False))
         self.bind('<Button-1>',lambda e:self.press());self.bind('<ButtonRelease-1>',self.release)
         self.bind('<Return>',lambda e:self.invoke());self.bind('<space>',lambda e:self.invoke())
@@ -37,8 +43,11 @@ class ProjectTab(tk.Canvas):
         if self.active:rounded(self,1,4,w-2,h-5,'#07150e' if green else '#090e1c','#07150e' if green else '#090e1c')
         rounded(self,1,top,w-2,h-top-3,fill,border)
         if self.active:self.create_line(12,top+2,w-12,top+2,fill=accent,width=2)
-        rounded(self,8,top+5,27,22,'#437454' if green and self.active else '#4a5d91' if self.active else fill,border,r=6)
-        self.create_text(21.5,top+16,text=badge(self.project['name']),fill=accent if self.active or self.hover else '#70947e' if green else '#7b89a9',font=('Segoe UI',-10,'bold'))
+        if self.task_logo is not None:
+            self.create_image(21.5,top+16,image=self.task_logo)
+        else:
+            rounded(self,8,top+5,27,22,'#437454' if green and self.active else '#4a5d91' if self.active else fill,border,r=6)
+            self.create_text(21.5,top+16,text=badge(self.project['name']),fill=accent if self.active or self.hover else '#70947e' if green else '#7b89a9',font=('Segoe UI',-10,'bold'))
         label=self.project['name']
         while label and self.name_font.measure(label)>w-49:label=label[:-1]
         if label!=self.project['name']:label=label[:-1]+'…'

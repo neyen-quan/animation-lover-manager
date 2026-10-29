@@ -48,6 +48,8 @@ python -m app.main
 
 La versión se define en `app/__init__.py`. Un commit en main con versión nueva activa el workflow Windows: pruebas, interfaz en varias escalas, compilación, paquete completo, delta, helper, `latest.json`, tag y release. Si la versión ya está publicada completamente, otro commit con la misma versión ejecuta las pruebas pero no crea otra release.
 
+El logo original de tareas se regenera con `python scripts/build_icon.py`. Produce los PNG de ventana/cabecera y un ICO con tamaños de 16 a 256 píxeles para Windows. Los recursos generados se conservan en `assets/` y se incluyen en ambos ejecutables.
+
 La publicación se prepara como borrador; se suben todos los archivos antes de habilitarla como latest. Después se descargan y verifican los hashes publicados. No crear releases manuales desde la web.
 
 Para recuperar una publicación fallida: Actions → Windows · verificar y publicar → Run workflow, usando el workflow de main e indicando el tag que se debe recompilar. Esto usa la definición actual del workflow para compilar el código del tag; no se necesita repetir un job viejo. Si el defecto está en el código de ese tag, corregir main e incrementar versión.

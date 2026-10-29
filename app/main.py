@@ -21,7 +21,10 @@ class App(tk.Tk):
         apply_theme(self)
         import sys
         icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets/icon.png'
-        if icon.exists():self._icon=tk.PhotoImage(file=icon);self.iconphoto(True,self._icon)
+        if icon.exists():
+            self._icon=tk.PhotoImage(file=icon)
+            self._window_icons=(self._icon,self._icon.subsample(8),self._icon.subsample(16))
+            self.iconphoto(True,*self._window_icons)
         self.root_store=Store();self.projects=Projects(self.root_store);self.project_id='main';self.store=self.root_store
         self.project_states={};self.finance_views={};self._switching_project=False
         PEOPLE[:]=self.store.people();ALIASES.clear();ALIASES.update(self.store.setting('aliases') or {})
